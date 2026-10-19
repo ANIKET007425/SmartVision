@@ -44,7 +44,11 @@ def load_yolo_world():
         "cup",
         "mobile phone",
         "cell phone",
-        "tie",
+        "necktie",
+        "black necktie",
+        "blue necktie",
+        "red necktie",
+        "white shirt",
         "bottle"
     ]
 
@@ -96,7 +100,7 @@ def get_dominant_color_name(frame, box):
 def analyze_objects(frame):
     results = yolo_model.predict(
         frame,
-        conf=0.20,
+        conf=0.50,
         imgsz=640,
         verbose=False
     )
