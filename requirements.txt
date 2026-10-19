@@ -5,3 +5,4 @@ deepface
 tf-keras
 pillow
 numpy
+git+https://github.com/openai/CLIP.git
