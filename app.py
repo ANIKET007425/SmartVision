@@ -237,7 +237,7 @@ mode = st.radio(
 if mode == "🖼️ Upload Image":
 
     uploaded_file = st.file_uploader(
-        "Image upload karo",
+        "Upload an image",
         type=["jpg", "jpeg", "png", "jfif", "webp", "bmp"]
     )
 
@@ -364,7 +364,7 @@ elif mode == "🎥 Live Webcam":
             ret, frame = cap.read()
 
             if not ret:
-                st.error("Camera se frame nahi mil raha.")
+                st.error("Not getting a frame from the camera.")
                 break
 
             frame_count += 1
