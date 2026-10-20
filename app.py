@@ -332,9 +332,9 @@ elif mode == "📸 Camera Capture":
         st.subheader("🙂 Face Analysis")
 
         with st.spinner("Face emotion and age are being analyzed..."):
-            age, dominant, dominant_score, emotions = analyze_face(frame)
+            dominant, dominant_score, emotions = analyze_face(frame)
 
-        show_face_results(age, dominant, dominant_score, emotions)
+        show_face_results(dominant, dominant_score, emotions)
 
 # ---------------- 3. Live Webcam ----------------
 
