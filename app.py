@@ -44,16 +44,7 @@ def load_yolo_world():
         "cup",
         "mobile phone",
         "cell phone",
-        "necktie",
-        "black necktie",
-        "blue necktie",
-        "red necktie",
-        "white shirt",
-        "black shirt",
-        "darkcolour shirt",
-        "bluesky shirt",
-        "jacket",
-        "t-shirt",
+        "tie",
         "bottle"
     ]
 
