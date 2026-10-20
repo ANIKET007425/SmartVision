@@ -178,7 +178,7 @@ def analyze_face(frame):
             frame,
             actions=["emotion", "age"],
             enforce_detection=False,
-            detector_backend="yolov8n",
+            detector_backend="mtcnn",
             silent=True
         )
 
