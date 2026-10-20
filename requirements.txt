@@ -4,6 +4,7 @@ opencv-contrib-python-headless==4.10.0.84
 opencv-python==4.10.0.84
 deepface
 tf-keras
+mtcnn
 pillow
 numpy==2.2.6
 torch==2.5.1
