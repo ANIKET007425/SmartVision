@@ -50,8 +50,8 @@ def load_yolo_world():
         "red necktie",
         "white shirt",
         "black shirt",
-        "dark colour shirt",
-        "blue sky shirt",
+        "darkcolour shirt",
+        "bluesky shirt",
         "jacket",
         "t-shirt",
         "bottle"
