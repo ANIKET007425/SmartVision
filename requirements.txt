@@ -1,9 +1,11 @@
 streamlit
 ultralytics
-opencv-python==4.10.0.84
 opencv-contrib-python-headless==4.10.0.84
+opencv-python==4.10.0.84
 deepface
 tf-keras
 pillow
 numpy
+torch==2.5.1
+torchvision==0.20.1
 git+https://github.com/openai/CLIP.git
