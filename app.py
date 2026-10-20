@@ -187,7 +187,7 @@ def analyze_face(frame):
             frame,
             actions=["emotion", "age"],
             enforce_detection=False,
-            detector_backend="opencv",
+            detector_backend="retinaface",
             silent=True
         )
 
