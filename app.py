@@ -175,7 +175,7 @@ def analyze_objects(frame):
 def analyze_face(frame):
     try:
         # TEMPORARY TEST: DeepFace disabled
-        return None
+        return None None None None
         analysis = DeepFace.analyze(
             frame,
             actions=["emotion", "age"],
