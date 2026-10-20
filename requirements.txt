@@ -1,6 +1,6 @@
 streamlit
 ultralytics
-opencv-python-headless==4.10.0.84
+opencv-contrib-python-headless
 deepface
 tf-keras
 pillow
