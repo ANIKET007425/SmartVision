@@ -21,7 +21,7 @@ st.set_page_config(
 
 st.title("🧠 SmartVision")
 st.write(
-    " Upload an image, Take photo with camera, or Run a live webcam. "
+    " Upload an image, Take photo with camera. "
     " Detection of Person, eyeglasses, pen, bag, cup, mobile phone, tie and bottle. "
     " You will also get the emotion percentage and estimated age from the face."
 )
@@ -98,7 +98,7 @@ def analyze_objects(frame):
     results = yolo_model.predict(
         frame,
         conf=0.40,
-        imgsz=640,
+        imgsz=320,
         verbose=False
     )
 
@@ -182,7 +182,7 @@ def analyze_face(frame):
             frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
         analysis = DeepFace.analyze(
             frame,
-            actions=["emotion", "age"],
+            actions=["emotion"],
             enforce_detection=False,
             detector_backend="mtcnn",
             silent=True
@@ -191,33 +191,27 @@ def analyze_face(frame):
         if analysis:
             face = analysis[0]
 
-            age = int(face["age"])
+            
             dominant = str(face["dominant_emotion"])
             emotions = face["emotion"]
             dominant_score = float(emotions[dominant])
 
-            return age, dominant, dominant_score, emotions
+            return  dominant, dominant_score, emotions
 
     except Exception as e:
         st.error(f"Face not detected: {type(e).__name__} — {e}")
     finally:
         gc.collect()
 
-    return None, None, None, None
+    return None, None, None
 
 # ---------------- Helper: Show Face Results ----------------
 
-def show_face_results(age, dominant, dominant_score, emotions):
-    if age is None:
+def show_face_results(dominant, dominant_score, emotions):
+    if dominant is None:
         st.info("Face not detected.")
         return
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric("Estimated Age", age)
-
-    with col2:
+        
         st.metric(
             "Dominant Emotion",
             dominant.capitalize(),
