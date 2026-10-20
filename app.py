@@ -24,7 +24,7 @@ st.title("🧠 SmartVision")
 st.write(
     " Upload an image, Take photo with camera. "
     " Detection of Person, eyeglasses, pen, bag, cup, mobile phone, tie and bottle. "
-    " You will also get the emotion percentage and estimated age from the face."
+    " You will also get the emotion percentage from the face."
 )
 
 # ---------------- Load YOLO-World Model ----------------
