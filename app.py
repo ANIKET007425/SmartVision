@@ -174,13 +174,11 @@ def analyze_objects(frame):
 
 def analyze_face(frame):
     try:
-        # TEMPORARY TEST: DeepFace disabled
-        return None None None None
         analysis = DeepFace.analyze(
             frame,
             actions=["emotion", "age"],
             enforce_detection=False,
-            detector_backend="retinaface",
+            detector_backend="yolov8n",
             silent=True
         )
 
