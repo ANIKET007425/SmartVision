@@ -213,7 +213,7 @@ def show_face_results(dominant, dominant_score, emotions):
         st.info("Face not detected.")
         return
         
-        st.metric(
+    st.metric(
             "Dominant Emotion",
             dominant.capitalize(),
             f"{dominant_score:.1f}%"
