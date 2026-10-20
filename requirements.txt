@@ -9,4 +9,5 @@ pillow
 numpy==2.2.6
 torch==2.5.1
 torchvision==0.20.1
+werkzeug
 git+https://github.com/openai/CLIP.git
