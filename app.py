@@ -3,6 +3,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 import time
+import gc
 import streamlit as st
 import cv2
 import numpy as np
@@ -174,6 +175,11 @@ def analyze_objects(frame):
 
 def analyze_face(frame):
     try:
+        # Resize large images to reduce memory usage
+        h, w = frame.shape[:2]
+        if max(h, w) > 640:
+            scale = 640 / max(h, w)
+            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
         analysis = DeepFace.analyze(
             frame,
             actions=["emotion", "age"],
@@ -194,6 +200,8 @@ def analyze_face(frame):
 
     except Exception as e:
         st.error(f"Face not detected: {type(e).__name__} — {e}")
+    finally:
+        gc.collect()
 
     return None, None, None, None
 
