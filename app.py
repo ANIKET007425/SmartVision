@@ -121,7 +121,7 @@ def get_dominant_color_name(frame, box):
     if v < 50:
         return "Black"
     if s < 40:
-        return "White/Grey"
+        return "Grey"
 
     if h < 10 or h >= 170:
         return "Red"
