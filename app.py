@@ -23,7 +23,7 @@ st.title("🧠 SmartVision")
 st.write(
     " Upload an image, Take photo with camera. "
     " Detection of Person, eyeglasses, pen, bag, cup, mobile phone, tie and bottle. "
-    " You will also get the emotion percentage from the face."
+    " You will also get the emotion percentage and an estimated age range from the face."
 )
 
 # ---------------- Load YOLO-World Model ----------------
@@ -53,6 +53,54 @@ def load_yolo_world():
     return model
 
 yolo_model = load_yolo_world()
+
+# ---------------- Age Model (small, OpenCV) ----------------
+
+MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+AGE_PROTO = os.path.join(MODELS_DIR, "age_deploy.prototxt")
+AGE_MODEL = os.path.join(MODELS_DIR, "age_net.caffemodel")
+
+AGE_RANGES = ["0-2", "4-6", "8-12", "15-20", "25-32", "38-43", "48-53", "60-100"]
+AGE_MEAN = (78.4263377603, 87.7689143744, 114.895847746)
+
+@st.cache_resource
+def load_age_model():
+    # If the model files are missing, the app still runs (age is just skipped)
+    if not (os.path.exists(AGE_PROTO) and os.path.exists(AGE_MODEL)):
+        return None
+    try:
+        return cv2.dnn.readNetFromCaffe(AGE_PROTO, AGE_MODEL)
+    except Exception as e:
+        # Do not crash the whole app if this OpenCV version cannot load the model
+        print("Age model could not be loaded:", type(e).__name__, e)
+        return None
+
+age_net = load_age_model()
+
+def estimate_age(frame, region):
+    if age_net is None:
+        return None
+
+    h, w = frame.shape[:2]
+    x, y = int(region["x"]), int(region["y"])
+    fw, fh = int(region["w"]), int(region["h"])
+
+    # Take a little extra area around the face
+    pad = int(0.2 * max(fw, fh))
+    x1, y1 = max(0, x - pad), max(0, y - pad)
+    x2, y2 = min(w, x + fw + pad), min(h, y + fh + pad)
+
+    face_img = frame[y1:y2, x1:x2]
+    if face_img.size == 0:
+        return None
+
+    blob = cv2.dnn.blobFromImage(
+        face_img, 1.0, (227, 227), AGE_MEAN, swapRB=False
+    )
+    age_net.setInput(blob)
+    predictions = age_net.forward()[0]
+
+    return AGE_RANGES[int(predictions.argmax())]
 
 # ---------------- Helper: Tie Colour ----------------
 
@@ -190,32 +238,39 @@ def analyze_face(frame):
 
         if analysis:
             face = analysis[0]
-        
 
-            if face.get("face_confidence",1)<0.5:
-                return None, None, None
+            # No real face found -> confidence is 0
+            if face.get("face_confidence", 1) < 0.5:
+                return None, None, None, None
 
             dominant = str(face["dominant_emotion"])
             emotions = face["emotion"]
             dominant_score = float(emotions[dominant])
+            age_range = estimate_age(frame, face["region"])
 
-            return  dominant, dominant_score, emotions
+            return age_range, dominant, dominant_score, emotions
 
     except Exception as e:
         st.error(f"Face not detected: {type(e).__name__} — {e}")
     finally:
         gc.collect()
 
-    return None, None, None
+    return None, None, None, None
 
 # ---------------- Helper: Show Face Results ----------------
 
-def show_face_results(dominant, dominant_score, emotions):
+def show_face_results(age_range, dominant, dominant_score, emotions):
     if dominant is None:
         st.info("Face not detected.")
         return
-        
-    st.metric(
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric("Estimated Age", age_range if age_range else "N/A")
+
+    with col2:
+        st.metric(
             "Dominant Emotion",
             dominant.capitalize(),
             f"{dominant_score:.1f}%"
@@ -284,10 +339,10 @@ if mode == "🖼️ Upload Image":
 
         st.subheader("🙂 Face Analysis")
 
-        with st.spinner("Face emotion is being analyzed..."):
-            dominant, dominant_score, emotions = analyze_face(frame)
+        with st.spinner("Face emotion and age are being analyzed..."):
+            age_range, dominant, dominant_score, emotions = analyze_face(frame)
 
-        show_face_results(dominant, dominant_score, emotions)
+        show_face_results(age_range, dominant, dominant_score, emotions)
 
 # ---------------- 2. Camera Capture ----------------
 
@@ -333,10 +388,10 @@ elif mode == "📸 Camera Capture":
 
         st.subheader("🙂 Face Analysis")
 
-        with st.spinner("Face emotion is being analyzed..."):
-            dominant, dominant_score, emotions = analyze_face(frame)
+        with st.spinner("Face emotion and age are being analyzed..."):
+            age_range, dominant, dominant_score, emotions = analyze_face(frame)
 
-        show_face_results(dominant, dominant_score, emotions)
+        show_face_results(age_range, dominant, dominant_score, emotions)
 
 # ---------------- 3. Live Webcam ----------------
 
