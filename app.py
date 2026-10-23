@@ -3,7 +3,6 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 os.environ["TF_USE_LEGACY_KERAS"] = "1"  
 
-import time
 import gc
 import streamlit as st
 import cv2
@@ -282,7 +281,7 @@ if mode == "🖼️ Upload Image":
 
         st.subheader("🙂 Face Analysis")
 
-        with st.spinner("Face emotion and age are being analyzed..."):
+        with st.spinner("Face emotion is being analyzed..."):
             dominant, dominant_score, emotions = analyze_face(frame)
 
         show_face_results(dominant, dominant_score, emotions)
@@ -331,7 +330,7 @@ elif mode == "📸 Camera Capture":
 
         st.subheader("🙂 Face Analysis")
 
-        with st.spinner("Face emotion and age are being analyzed..."):
+        with st.spinner("Face emotion is being analyzed..."):
             dominant, dominant_score, emotions = analyze_face(frame)
 
         show_face_results(dominant, dominant_score, emotions)
