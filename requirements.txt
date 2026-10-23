@@ -15,7 +15,10 @@ tf-keras==2.21.0
 mtcnn==1.0.0
 
 # --- Images and numbers ---
+# Keep BOTH OpenCV packages on the SAME version. Some package installs the contrib one;
+# if it is not pinned it becomes 5.x and the age model can no longer load.
 opencv-python==4.10.0.84
+opencv-contrib-python-headless==4.10.0.84
 pillow==13.0.0
 numpy==2.2.6
 
