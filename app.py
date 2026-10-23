@@ -39,14 +39,12 @@ def load_yolo_world():
         "pen",
         "ballpoint pen",
         "bag",
-        "handbag",
-        "backpack",
-        "coffee cup",
         "cup",
         "mobile phone",
         "cell phone",
         "tie",
-        "bottle"
+        "bottle",
+        "book",
     ]
 
     model.set_classes(custom_classes)
@@ -140,13 +138,32 @@ def get_dominant_color_name(frame, box):
     else:
         return "Pink"
 
+# ---------------- Sidebar: Detection Settings ----------------
+
+st.sidebar.header("⚙️ Detection Settings")
+
+conf_value = st.sidebar.slider(
+    "Confidence (higher = fewer but surer detections)",
+    min_value=0.10,
+    max_value=0.80,
+    value=0.40,
+    step=0.05
+)
+
+imgsz_value = st.sidebar.selectbox(
+    "Image size (bigger = better for small objects, but slower)",
+    [320, 480],
+    index=0
+)
+
 # ---------------- Helper: Object Analysis ----------------
 
 def analyze_objects(frame):
     results = yolo_model.predict(
         frame,
-        conf=0.40,
-        imgsz=320,
+        conf=conf_value,
+        imgsz=imgsz_value,
+        agnostic_nms=True,
         verbose=False
     )
 
