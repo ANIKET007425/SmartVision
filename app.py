@@ -22,7 +22,7 @@ st.set_page_config(
 st.title("🧠 SmartVision")
 st.write(
     " Upload an image, Take photo with camera. "
-    " Detection of Person, eyeglasses, pen, bag, cup, mobile phone, tie and bottle. "
+    " Detection of Person, eyeglasses, pen, book, bag, cup, mobile phone, tie and bottle. "
     " You will also get the emotion percentage and an estimated age range from the face."
 )
 
@@ -41,7 +41,6 @@ def load_yolo_world():
         "bag",
         "cup",
         "mobile phone",
-        "cell phone",
         "tie",
         "bottle",
         "book",
