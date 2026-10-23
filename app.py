@@ -190,8 +190,7 @@ def analyze_face(frame):
 
         if analysis:
             face = analysis[0]
-            
-            st.write("TEST face_confidence:", face.get("face_confidence"))
+        
 
             if face.get("face_confidence",1)<0.5:
                 return None, None, None
