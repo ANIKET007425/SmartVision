@@ -284,23 +284,6 @@ def show_face_results(age_range, dominant, dominant_score, emotions):
 
         st.progress(progress_value)
         st.write(f"**{emotion.capitalize()}**: {score:.1f}%")
-# ---------------- TEMPORARY: package versions (delete later) ----------------
-
-import sys
-import importlib.metadata as md
-
-with st.expander("🔧 Package versions (temporary)"):
-    st.write("Python:", sys.version)
-    for name in [
-        "streamlit", "ultralytics", "deepface", "tf-keras", "mtcnn",
-        "pillow", "werkzeug", "tensorflow", "keras", "numpy", "torch",
-        "torchvision", "opencv-python", "opencv-contrib-python-headless",
-        "clip",
-    ]:
-        try:
-            st.write(name, "==", md.version(name))
-        except Exception:
-            st.write(name, "-> not found")
 
 # ---------------- Mode Selection ----------------
 
