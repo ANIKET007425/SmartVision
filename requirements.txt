@@ -24,3 +24,4 @@ numpy==2.2.6
 
 # --- Other ---
 werkzeug==3.1.9
+streamlit-webrtc==0.78.1
