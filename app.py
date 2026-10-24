@@ -190,7 +190,7 @@ div.stButton > button:hover { transform: translateY(-2px) scale(1.04); box-shado
 st.title("🧠 SmartVision")
 st.write(
     " Upload an image, Take photo with camera. "
-    " Detection of Person, eyeglasses, pen, book, bag, cup, mobile phone, newspaper, watch, tie and bottle. "
+    " Detection of Person, eyeglasses, pen, book, bag, cup, mobile phone, tie and bottle. "
     " You will also get the emotion percentage and an estimated age range from the face."
 )
 
@@ -212,8 +212,6 @@ def load_yolo_world():
         "tie",
         "bottle",
         "book",
-        "watch",
-        "newspaper",
     ]
 
     model.set_classes(custom_classes)
