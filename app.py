@@ -189,11 +189,10 @@ div.stButton > button:hover { transform: translateY(-2px) scale(1.04); box-shado
 
 st.title("🧠 SmartVision")
 st.write(
-    " Upload an image, Take photo with camera. "
-    " Detection of Person, eyeglasses, pen, book, bag, cup, mobile phone, tie and bottle. "
+    " Upload an image, take a photo, or use the live webcam. "
+    " Detection of Person, eyeglasses, pen, bag, cup, mobile phone, tie, bottle and book. "
     " You will also get the emotion percentage and an estimated age range from the face."
 )
-
 # ---------------- Load YOLO-World Model ----------------
 
 @st.cache_resource
@@ -209,6 +208,7 @@ def load_yolo_world():
         "bag",
         "cup",
         "mobile phone",
+        "cell phone",
         "tie",
         "bottle",
         "book",
@@ -477,7 +477,7 @@ def show_face_results(age_range, dominant, dominant_score, emotions):
 
 mode = st.radio(
     "Choose mode:",
-    ["🖼️ Upload Image", "📸 Camera Capture"]
+    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam"]
 )
 
 # ---------------- 1. Upload Image ----------------
@@ -584,288 +584,5 @@ elif mode == "📸 Camera Capture":
 # ---------------- 3. Live Webcam ----------------
 
 elif mode == "🎥 Live Webcam":
-
-    st.warning(
-        "Press start, Allow camera permission . "
-        "Press Stop to turn off."
-    )
-
-    start = st.button("▶️ Start Live Webcam")
-    stop = st.button("⏹️ Stop")
-
-    # Placeholder for video
-    frame_placeholder = st.empty()
-
-    # Placeholder for detailed output below
-    details_placeholder = st.empty()
-
-    if start:
-        cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-        frame_count = 0
-        face_info = None
-        latest_details = []
-
-        while cap.isOpened() and not stop:
-            ret, frame = cap.read()
-
-            if not ret:
-                st.error("Not getting a frame from the camera.")
-                break
-
-            frame_count += 1
-
-            # ---------------- YOLO Object Detection ----------------
-
-            results = yolo_model.predict(
-                frame,
-                conf=0.25,
-                imgsz=480,
-                verbose=False
-            )
-
-            latest_details = []
-
-            for result in results:
-                for box in result.boxes:
-                    label = yolo_model.names[int(box.cls[0])]
-                    confidence = float(box.conf[0])
-                    box_coords = box.xyxy[0].tolist()
-
-                    x1, y1, x2, y2 = map(int, box_coords)
-
-                    # Person: green box
-                    if label == "person":
-                        color = (0, 255, 0)
-                        text = f"Person: {confidence:.2f}"
-
-                        latest_details.append(
-                            f"🧍 **Person detected** — "
-                            f"Confidence: **{confidence:.2f}**"
-                        )
-
-                    # Remaining objects: blue box
-                    else:
-                        color = (255, 100, 0)
-                        text = label.capitalize()
-
-                        if label == "tie":
-                            tie_colour = get_dominant_color_name(
-                                frame,
-                                box_coords
-                            )
-
-                            latest_details.append(
-                                f"👔 **Tie detected** — "
-                                f"Colour: **{tie_colour}** — "
-                                f"Confidence: **{confidence:.2f}**"
-                            )
-
-                            text = f"Tie: {tie_colour}"
-
-                        elif label in ["eyeglasses", "spectacles"]:
-                            latest_details.append(
-                                f"👓 **Eyeglasses detected** — "
-                                f"Confidence: **{confidence:.2f}**"
-                            )
-
-                        elif label in ["pen", "ballpoint pen"]:
-                            latest_details.append(
-                                f"🖊️ **Pen detected** — "
-                                f"Confidence: **{confidence:.2f}**"
-                            )
-
-                        elif label in ["bag", "handbag", "backpack"]:
-                            latest_details.append(
-                                f"🎒 **Bag detected** — "
-                                f"Confidence: **{confidence:.2f}**"
-                            )
-
-                        elif label in ["coffee cup", "cup"]:
-                            latest_details.append(
-                                f"☕ **Cup detected** — "
-                                f"Confidence: **{confidence:.2f}**"
-                            )
-
-                        elif label in ["mobile phone", "cell phone"]:
-                            latest_details.append(
-                                f"📱 **Mobile phone detected** — "
-                                f"Confidence: **{confidence:.2f}**"
-                            )
-
-                        elif label == "bottle":
-                            latest_details.append(
-                                f"🍶 **Bottle detected** — "
-                                f"Confidence: **{confidence:.2f}**"
-                            )
-
-                        else:
-                            latest_details.append(
-                                f"- **{label.capitalize()}** — "
-                                f"Confidence: **{confidence:.2f}**"
-                            )
-
-                    # Draw a box on the video
-                    cv2.rectangle(
-                        frame,
-                        (x1, y1),
-                        (x2, y2),
-                        color,
-                        2
-                    )
-
-                    cv2.putText(
-                        frame,
-                        text,
-                        (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        color,
-                        2
-                    )
-
-            # ---------------- DeepFace Face Analysis ----------------
-
-            # Analyze the face on every 10th frame
-            if frame_count % 10 == 0:
-                try:
-                    analysis = DeepFace.analyze(
-                        frame,
-                        actions=["emotion", "age"],
-                        enforce_detection=False,
-                        detector_backend="opencv",
-                        silent=True
-                    )
-
-                    if analysis:
-                        face_info = analysis[0]
-
-                except Exception:
-                    face_info = None
-
-            # ---------------- Draw a box around the face in the video ----------------
-
-            if face_info:
-                region = face_info["region"]
-                fx, fy = region["x"], region["y"]
-                fw, fh = region["w"], region["h"]
-
-                emotions = face_info["emotion"]
-                dominant = face_info["dominant_emotion"]
-                age = face_info["age"]
-
-                # Green face box
-                cv2.rectangle(
-                    frame,
-                    (fx, fy),
-                    (fx + fw, fy + fh),
-                    (0, 255, 0),
-                    2
-                )
-
-                # Emotion on the face
-                cv2.putText(
-                    frame,
-                    f"{dominant}: {emotions[dominant]:.1f}%",
-                    (fx, fy - 45),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (0, 255, 0),
-                    2
-                )
-
-                # Age
-                cv2.putText(
-                    frame,
-                    f"Age: {age}",
-                    (fx, fy - 20),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 255, 0),
-                    2
-                )
-
-                # Top 3 emotions beneath the surface
-                top_emotions = sorted(
-                    emotions.items(),
-                    key=lambda item: item[1],
-                    reverse=True
-                )[:3]
-
-                y_pos = fy + fh + 25
-
-                for emotion, score in top_emotions:
-                    cv2.putText(
-                        frame,
-                        f"{emotion}: {score:.1f}%",
-                        (fx, y_pos),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.55,
-                        (255, 255, 255),
-                        2
-                    )
-                    y_pos += 22
-
-            # ---------------- Show live video  ----------------
-
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            frame_placeholder.image(
-                rgb_frame,
-                channels="RGB",
-                width="stretch"
-            )
-
-            # ---------------- Detailed output below ----------------
-
-            with details_placeholder.container():
-
-                st.subheader("📋 Live Detection Details")
-
-                if latest_details:
-                    for detail in latest_details:
-                        st.write(detail)
-                else:
-                    st.info("No object has been detected yet.")
-
-                st.subheader("🙂 Live Face Analysis")
-
-                if face_info:
-                    age = int(face_info["age"])
-                    dominant = str(face_info["dominant_emotion"])
-                    emotions = face_info["emotion"]
-                    dominant_score = float(emotions[dominant])
-
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        st.metric("Estimated Age", age)
-
-                    with col2:
-                        st.metric(
-                            "Dominant Emotion",
-                            dominant.capitalize(),
-                            f"{dominant_score:.1f}%"
-                        )
-
-                    st.subheader("📊 Emotion Confidence")
-
-                    for emotion, score in emotions.items():
-                        score = float(score)
-                        progress_value = min(score / 100.0, 1.0)
-
-                        st.progress(progress_value)
-                        st.write(
-                            f"**{emotion.capitalize()}**: {score:.1f}%"
-                        )
-
-                else:
-                    st.info(
-                        "Face not detected. Face in front of camera "
-                        "Place it in the center and improve the lighting."
-                    )
-
-        cap.release()
-        cv2.destroyAllWindows()
+    from live_webcam import run_live
+    run_live(yolo_model, conf_value, imgsz_value, get_dominant_color_name)
