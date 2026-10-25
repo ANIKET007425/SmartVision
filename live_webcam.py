@@ -377,10 +377,21 @@ def _loaded_report():
         f"{name}={'yes' if name in sys.modules else 'no'}" for name in WATCHED_MODULES
     )
 
-# While we are fixing the crash: ask the visitor to press a button before the
-# video libraries are loaded in the app process, so the diagnostics can be used
-# even if loading them crashes the app. Set to False once Live Webcam works.
-REQUIRE_CLICK_BEFORE_LOADING = True
+# The crash is fixed (app.py loads streamlit_webrtc before deepface), so normal
+# visitors see no diagnostics and no extra button. For the OWNER there is a
+# debug mode: add `&debug=1` at the end of the web address. In debug mode the
+# diagnostics are shown and the video libraries load only after a button click,
+# so the tools stay usable even if a future update brings the crash back.
+# Set this to True to ask every visitor to click first.
+REQUIRE_CLICK_BEFORE_LOADING = False
+
+
+def _debug_mode(st):
+    """True when the web address ends with `debug=1` (owner-only tools)."""
+    try:
+        return str(st.query_params.get("debug", "")) == "1"
+    except Exception:
+        return False
 
 REPORT_PACKAGES = [
     "streamlit", "streamlit-webrtc", "av", "aiortc", "pylibsrtp", "cryptography",
@@ -495,9 +506,16 @@ def run_live(yolo_model, conf_value, imgsz_value, colour_fn=None):
     except Exception:
         pass
 
-    _trace("run_live started; running the safety check in a separate process")
-    ok, details = _preflight()
-    _trace(f"safety check finished: {'OK' if ok else 'FAILED'}")
+    debug = _debug_mode(st)
+
+    _trace("run_live started")
+    if "streamlit_webrtc" in sys.modules and not debug:
+        # app.py already loaded it at start-up (and survived), so it is safe
+        ok, details = True, ""
+    else:
+        _trace("running the safety check in a separate process")
+        ok, details = _preflight()
+        _trace(f"safety check finished: {'OK' if ok else 'FAILED'}")
     if not ok:
         if "No module named" in details:
             st.error(
@@ -509,13 +527,15 @@ def run_live(yolo_model, conf_value, imgsz_value, colour_fn=None):
                 "Live webcam cannot start on this server because a video library "
                 "crashed when it was loaded. The rest of the app still works."
             )
-        st.code(details)
-        _diagnostics_ui(st)
+        if debug:
+            st.code(details)
+            _diagnostics_ui(st)
         return
 
-    _diagnostics_ui(st)
+    if debug:
+        _diagnostics_ui(st)
 
-    if REQUIRE_CLICK_BEFORE_LOADING and not st.session_state.get("live_libs_requested"):
+    if (REQUIRE_CLICK_BEFORE_LOADING or debug) and not st.session_state.get("live_libs_requested"):
         st.info(
             "The safety check passed. Press the button to load the live video "
             "libraries in the app. (If this crashes the app, open the page again "
@@ -585,12 +605,18 @@ def run_live(yolo_model, conf_value, imgsz_value, colour_fn=None):
     )
     _trace("webrtc_streamer returned")
 
-    if turn_ok:
-        st.caption("Connection: TURN relay is configured.")
+    if debug:
+        if turn_ok:
+            st.caption("Connection: TURN relay is configured.")
+        else:
+            st.caption(
+                "Connection: no TURN relay set up. This is fine on your own "
+                "computer. The online app may need one if the video does not start."
+            )
     else:
         st.caption(
-            "Connection: no TURN relay set up. This is fine on your own "
-            "computer. The online app may need one if the video does not start."
+            "Video not starting? Some office or school networks block live video. "
+            "Try another network or a mobile hotspot."
         )
 
     panel = st.empty()
