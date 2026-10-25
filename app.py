@@ -317,21 +317,22 @@ if st.sidebar.button("🏠 Home"):
        st.query_params.clear()
        st.rerun()
 
-st.sidebar.header("⚙️ Detection Settings")
+# Click the title to open or close the settings (they stay closed until clicked)
+with st.sidebar.expander("⚙️ Detection Settings", expanded=False):
 
-conf_value = st.sidebar.slider(
-    "Confidence (higher = fewer but surer detections)",
-    min_value=0.10,
-    max_value=0.80,
-    value=0.40,
-    step=0.05
-)
+    conf_value = st.slider(
+        "Confidence (higher = fewer but surer detections)",
+        min_value=0.10,
+        max_value=0.80,
+        value=0.40,
+        step=0.05
+    )
 
-imgsz_value = st.sidebar.selectbox(
-    "Image size (bigger = better for small objects, but slower)",
-    [320, 480],
-    index=0
-)
+    imgsz_value = st.selectbox(
+        "Image size (bigger = better for small objects, but slower)",
+        [320, 480],
+        index=1
+    )
 
 # ---------------- Helper: Object Analysis ----------------
 
@@ -483,7 +484,7 @@ def show_face_results(age_range, dominant, dominant_score, emotions):
 
 mode = st.radio(
     "Choose mode:",
-    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam","ℹ️ How it works"]
+    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam","ℹ️How it works"]
 )
 
 # ---------------- 1. Upload Image ----------------
@@ -592,8 +593,8 @@ elif mode == "📸 Camera Capture":
 elif mode == "🎥 Live Webcam":
     from live_webcam import run_live
     run_live(yolo_model, conf_value, imgsz_value, get_dominant_color_name)
-   # ---------------- 4. How it works ----------------
+# ---------------- 4. How it works ----------------
 
 elif mode == "ℹ️ How it works":
     from how_it_works import show_how_it_works
-    show_how_it_works()    
+    show_how_it_works()
