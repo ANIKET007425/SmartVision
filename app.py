@@ -331,7 +331,7 @@ with st.sidebar.expander("⚙️ Detection Settings", expanded=False):
     imgsz_value = st.selectbox(
         "Image size (bigger = better for small objects, but slower)",
         [320, 480],
-        index=1
+        index=0
     )
 
 # ---------------- Helper: Object Analysis ----------------
