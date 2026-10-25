@@ -483,7 +483,7 @@ def show_face_results(age_range, dominant, dominant_score, emotions):
 
 mode = st.radio(
     "Choose mode:",
-    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam"]
+    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam","ℹ️ How it works"]
 )
 
 # ---------------- 1. Upload Image ----------------
@@ -592,3 +592,8 @@ elif mode == "📸 Camera Capture":
 elif mode == "🎥 Live Webcam":
     from live_webcam import run_live
     run_live(yolo_model, conf_value, imgsz_value, get_dominant_color_name)
+   # ---------------- 4. How it works ----------------
+
+elif mode == "ℹ️ How it works":
+    from how_it_works import show_how_it_works
+    show_how_it_works()    
