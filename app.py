@@ -595,6 +595,6 @@ elif mode == "🎥 Live Webcam":
     run_live(yolo_model, conf_value, imgsz_value, get_dominant_color_name)
 # ---------------- 4. How it works ----------------
 
-elif mode == "ℹ️ How it works":
+elif mode == "How it works" in mode:
     from how_it_works import show_how_it_works
     show_how_it_works()
