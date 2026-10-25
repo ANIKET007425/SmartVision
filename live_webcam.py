@@ -29,7 +29,8 @@ def _trace(message):
     try:
         import psutil
         mb = psutil.Process().memory_info().rss / (1024 * 1024)
-        print(f"[live] {message} (memory {mb:.0f} MB)", file=sys.stderr, flush=True)
+        loaded = ", ".join(n for n in ("torch", "tensorflow", "cv2", "av") if n in sys.modules)
+        print(f"[live] {message} (memory {mb:.0f} MB; loaded: {loaded})", file=sys.stderr, flush=True)
     except Exception:
         print(f"[live] {message}", file=sys.stderr, flush=True)
 
@@ -324,18 +325,57 @@ CLASH_TESTS = [
     ]
 ]
 
-APP_ORDER = "numpy, PIL, yaml, torch, h5py, pyarrow, pandas, av"
+def _in_thread(code, then=""):
+    """Python source that runs `code` inside a NON-main thread (like Streamlit's
+    script thread does), and afterwards runs `then` in the main thread.
+    A crash kills the process (-11); a normal import error gives exit code 1."""
+    body = "\n".join("        " + line for line in code.splitlines())
+    return (
+        "import sys, threading\n"
+        "errors = []\n"
+        "def _run():\n"
+        "    try:\n"
+        f"{body}\n"
+        "    except BaseException as e:\n"
+        "        errors.append(e)\n"
+        "        print(repr(e), file=sys.stderr)\n"
+        "t = threading.Thread(target=_run)\n"
+        "t.start()\n"
+        "t.join()\n"
+        "if errors:\n"
+        "    sys.exit(1)\n"
+        f"{then}\n"
+    )
 
+
+# The imports that app.py does at the top (before the live page is opened)
+APP_IMPORTS = "import cv2\nfrom ultralytics import YOLOWorld\nfrom deepface import DeepFace"
+
+# Known from the last run: "tensorflow, then pylibsrtp" CRASHES, torch is fine.
 HEAVY_TESTS = [
-    ("torch, then pylibsrtp", "import torch; import pylibsrtp"),
-    ("tensorflow, then pylibsrtp", "import tensorflow; import pylibsrtp"),
-    ("ultralytics, then pylibsrtp", "import ultralytics; import pylibsrtp"),
-    ("deepface, then pylibsrtp", "import deepface; import pylibsrtp"),
-    ("same order as the app, then pylibsrtp", f"import {APP_ORDER}; import pylibsrtp"),
-    ("pylibsrtp FIRST, then the same libraries", f"import pylibsrtp; import {APP_ORDER}"),
-    ("torch, then streamlit_webrtc", "import torch, streamlit_webrtc"),
-    ("tensorflow, then streamlit_webrtc", "import tensorflow, streamlit_webrtc"),
+    ("tensorflow, then pylibsrtp", "import tensorflow\nimport pylibsrtp"),
+    ("pylibsrtp FIRST, then tensorflow", "import pylibsrtp\nimport tensorflow"),
+    ("streamlit_webrtc FIRST, then tensorflow", "import streamlit_webrtc\nimport tensorflow"),
+    ("app imports, then streamlit_webrtc", APP_IMPORTS + "\nimport streamlit_webrtc"),
+    ("streamlit_webrtc FIRST, then app imports", "import streamlit_webrtc\n" + APP_IMPORTS),
+    ("pylibsrtp alone, in a non-main thread", _in_thread("import pylibsrtp")),
+    ("app imports, then streamlit_webrtc, all in a thread",
+     _in_thread(APP_IMPORTS + "\nimport streamlit_webrtc")),
+    ("streamlit_webrtc FIRST in a thread, then app imports",
+     _in_thread("import streamlit_webrtc", then=APP_IMPORTS)),
 ]
+
+WATCHED_MODULES = [
+    "torch", "tensorflow", "keras", "cv2", "ultralytics", "deepface",
+    "av", "aiortc", "pylibsrtp", "streamlit_webrtc",
+]
+
+
+def _loaded_report():
+    """Which heavy libraries are already loaded in THIS process."""
+    return ", ".join(
+        f"{name}={'yes' if name in sys.modules else 'no'}" for name in WATCHED_MODULES
+    )
 
 # While we are fixing the crash: ask the visitor to press a button before the
 # video libraries are loaded in the app process, so the diagnostics can be used
@@ -405,7 +445,12 @@ def _package_versions():
 
 def run_self_test(heavy=False):
     """Text report: which import combinations work in a fresh process."""
-    lines = ["Python " + sys.version.split()[0], *_package_versions(), ""]
+    lines = [
+        "Python " + sys.version.split()[0],
+        *_package_versions(),
+        "Already loaded in the app: " + _loaded_report(),
+        "",
+    ]
     tests = SELF_TESTS + CLASH_TESTS + (HEAVY_TESTS if heavy else [])
 
     for name, code in tests:
@@ -425,6 +470,7 @@ def _diagnostics_ui(st):
             "These tests run in separate processes, so they cannot crash the app. "
             "Copy the result text and send it."
         )
+        st.caption("Already loaded in the app: " + _loaded_report())
 
         if st.button("Run light self-test", key="diag_light"):
             with st.spinner("Testing library combinations (about a minute)..."):
