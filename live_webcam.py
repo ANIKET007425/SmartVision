@@ -313,10 +313,34 @@ SELF_TESTS = [
     ("cv2, then streamlit_webrtc", "import cv2, streamlit_webrtc"),
 ]
 
+# "X first, then pylibsrtp": pylibsrtp is the library that crashed in the app
+# (Fatal Python error: Segmentation fault ... pylibsrtp/__init__.py). These tests
+# find out WHICH other library it clashes with. Each one runs in its own process.
+CLASH_TESTS = [
+    (f"{name}, then pylibsrtp", f"import {name}; import pylibsrtp")
+    for name in [
+        "numpy", "PIL", "yaml", "google.protobuf", "websockets",
+        "pyarrow", "pandas", "h5py", "onnxruntime", "cryptography", "psutil",
+    ]
+]
+
+APP_ORDER = "numpy, PIL, yaml, torch, h5py, pyarrow, pandas, av"
+
 HEAVY_TESTS = [
+    ("torch, then pylibsrtp", "import torch; import pylibsrtp"),
+    ("tensorflow, then pylibsrtp", "import tensorflow; import pylibsrtp"),
+    ("ultralytics, then pylibsrtp", "import ultralytics; import pylibsrtp"),
+    ("deepface, then pylibsrtp", "import deepface; import pylibsrtp"),
+    ("same order as the app, then pylibsrtp", f"import {APP_ORDER}; import pylibsrtp"),
+    ("pylibsrtp FIRST, then the same libraries", f"import pylibsrtp; import {APP_ORDER}"),
     ("torch, then streamlit_webrtc", "import torch, streamlit_webrtc"),
     ("tensorflow, then streamlit_webrtc", "import tensorflow, streamlit_webrtc"),
 ]
+
+# While we are fixing the crash: ask the visitor to press a button before the
+# video libraries are loaded in the app process, so the diagnostics can be used
+# even if loading them crashes the app. Set to False once Live Webcam works.
+REQUIRE_CLICK_BEFORE_LOADING = True
 
 REPORT_PACKAGES = [
     "streamlit", "streamlit-webrtc", "av", "aiortc", "pylibsrtp", "cryptography",
@@ -382,7 +406,7 @@ def _package_versions():
 def run_self_test(heavy=False):
     """Text report: which import combinations work in a fresh process."""
     lines = ["Python " + sys.version.split()[0], *_package_versions(), ""]
-    tests = SELF_TESTS + (HEAVY_TESTS if heavy else [])
+    tests = SELF_TESTS + CLASH_TESTS + (HEAVY_TESTS if heavy else [])
 
     for name, code in tests:
         rc, err, secs = _run_snippet(code)
@@ -392,6 +416,27 @@ def run_self_test(heavy=False):
                 lines.append("      " + line[:160])
 
     return "\n".join(lines)
+
+
+def _diagnostics_ui(st):
+    """Buttons that run the import tests in separate processes (cannot crash the app)."""
+    with st.expander("Diagnostics (to find the live webcam crash)"):
+        st.caption(
+            "These tests run in separate processes, so they cannot crash the app. "
+            "Copy the result text and send it."
+        )
+
+        if st.button("Run light self-test", key="diag_light"):
+            with st.spinner("Testing library combinations (about a minute)..."):
+                st.session_state["selftest_report"] = run_self_test()
+
+        if st.button("Run heavy self-test (slow, uses a lot of memory)", key="diag_heavy"):
+            with st.spinner("Testing with torch and tensorflow (a few minutes)..."):
+                st.session_state["selftest_report"] = run_self_test(heavy=True)
+
+        report = st.session_state.get("selftest_report")
+        if report:
+            st.code(report)
 
 
 def run_live(yolo_model, conf_value, imgsz_value, colour_fn=None):
@@ -419,14 +464,20 @@ def run_live(yolo_model, conf_value, imgsz_value, colour_fn=None):
                 "crashed when it was loaded. The rest of the app still works."
             )
         st.code(details)
+        _diagnostics_ui(st)
+        return
 
-        if st.button("Run detailed self-test"):
-            with st.spinner("Testing library combinations (can take a minute)..."):
-                st.code(run_self_test())
+    _diagnostics_ui(st)
 
-        if st.button("Run heavy self-test (may restart the app)"):
-            with st.spinner("Testing with torch and tensorflow (slow, uses a lot of memory)..."):
-                st.code(run_self_test(heavy=True))
+    if REQUIRE_CLICK_BEFORE_LOADING and not st.session_state.get("live_libs_requested"):
+        st.info(
+            "The safety check passed. Press the button to load the live video "
+            "libraries in the app. (If this crashes the app, open the page again "
+            "and use the diagnostics above.)"
+        )
+        if st.button("Load live webcam", key="load_live"):
+            st.session_state["live_libs_requested"] = True
+            st.rerun()
         return
 
     try:
