@@ -5,6 +5,12 @@ os.environ["TF_USE_LEGACY_KERAS"] = "1"
 
 import gc
 import streamlit as st
+# Live webcam: this video library MUST be loaded before cv2 / ultralytics / deepface
+# (deepface loads TensorFlow). In the other order Streamlit Cloud crashes (segfault).
+try:
+    import streamlit_webrtc  # noqa: F401
+except Exception:
+    pass
 import cv2
 import numpy as np
 from PIL import Image
