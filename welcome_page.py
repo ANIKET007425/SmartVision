@@ -2,20 +2,29 @@
 
 app.py uses it like this, right after the neon background code:
 
-    from welcome_page import show_welcome
+    from welcome_page import show_welcome, tighten_layout
     show_welcome()
+    tighten_layout()
 
 show_welcome() draws the page. If the visitor has not pressed "Start" yet, it
 STOPS the script, so the AI models below it in app.py are not loaded yet.
 When Start is pressed it returns and the normal app continues.
+
+tighten_layout() is for all the other pages (detection, camera, live, how it
+works). Streamlit leaves a big empty strip above and below the content, which
+makes a page scroll even when there is nothing to see below. This makes the
+strip smaller. It only runs after Start, because show_welcome() stops the
+script before it on the welcome page.
 
 Every new visit (a fresh link, a refresh, a bookmark) opens on THIS page. An old
 address that ends with ?page=app does not skip it any more.
 
 What this layout does on purpose:
   * the page is exactly one screen tall, so it does not scroll on a normal
-    phone or laptop (Streamlit normally adds a lot of empty space at the
-    bottom, and that is what made the page move up and down);
+    phone or laptop. Two things used to push it taller than the screen:
+    Streamlit's empty space at the bottom, and the extra top/bottom margin
+    that the neon-background CSS in app.py puts on the same box. Both are
+    switched off here, and on a normal-height screen scrolling is locked;
   * everything is centred in the middle of the screen, both ways;
   * the intro animation only fades in (it no longer slides), so nothing jumps;
   * text sizes use clamp(), so they shrink on a phone and grow on a laptop;
@@ -38,7 +47,13 @@ STYLE = """
   background: transparent; border: none; box-shadow: none; backdrop-filter: none;
   min-height: 100vh; min-height: 100dvh;
   padding: 3.75rem 1rem !important;
+  margin-top: 0 !important; margin-bottom: 0 !important;
   display: flex; flex-direction: column; justify-content: center;
+}
+/* 1b) Normal-height screens: the page is exactly one screen, so lock the scrolling.
+   (Very short screens, like a phone held sideways, are left alone so nothing gets cut off.) */
+@media (min-height: 601px) {
+  [data-testid="stAppViewContainer"], [data-testid="stMain"], section.main { overflow: hidden !important; }
 }
 [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] { gap: 1.3rem; }
 /* 2) The text block */
@@ -90,6 +105,23 @@ HERO = """
 <div class="sv-chips"><span>🎯 Object detection</span><span>🙂 Emotion analysis</span><span>🎂 Age range</span><span>🎥 Live webcam</span></div>
 </div>
 """
+
+
+TIGHT = """
+<style>
+[data-testid="stMainBlockContainer"], .block-container {
+  padding-top: 4.5rem !important;
+  padding-bottom: 2.5rem !important;
+  margin-top: .5rem !important;
+  margin-bottom: 1rem !important;
+}
+</style>
+"""
+
+
+def tighten_layout():
+    """Make the empty strip above and below the content smaller (all pages after Start)."""
+    st.markdown(TIGHT, unsafe_allow_html=True)
 
 
 def show_welcome():

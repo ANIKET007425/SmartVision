@@ -133,8 +133,9 @@ h1 { text-shadow: 0 0 18px rgba(255,62,165,.55); }
 )
 # ---------------- Welcome (landing) page ----------------
 
-from welcome_page import show_welcome
+from welcome_page import show_welcome, tighten_layout
 show_welcome()
+tighten_layout()
 
 st.title("🧠 SmartVision")
 st.write(
