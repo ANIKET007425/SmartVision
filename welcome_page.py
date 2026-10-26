@@ -7,8 +7,10 @@ app.py uses it like this, right after the neon background code:
 
 show_welcome() draws the page. If the visitor has not pressed "Start" yet, it
 STOPS the script, so the AI models below it in app.py are not loaded yet.
-When Start is pressed (or the address already ends with ?page=app) it returns
-and the normal app continues.
+When Start is pressed it returns and the normal app continues.
+
+Every new visit (a fresh link, a refresh, a bookmark) opens on THIS page. An old
+address that ends with ?page=app does not skip it any more.
 
 What this layout does on purpose:
   * the page is exactly one screen tall, so it does not scroll on a normal
@@ -40,7 +42,8 @@ STYLE = """
 }
 [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] { gap: 1.3rem; }
 /* 2) The text block */
-.sv-hero { width: 100%; max-width: 46rem; margin: 0 auto; text-align: center; animation: sv-fade 1.2s ease both; }
+.sv-hero { width: 100%; max-width: 46rem; margin: 0 auto; padding-bottom: 1.5rem; text-align: center; animation: sv-fade 1.2s ease both; }
+.sv-hero [data-testid="stHeaderActionElements"], .sv-hero h1 a { display: none !important; }
 @keyframes sv-fade { from { opacity: 0; } to { opacity: 1; } }
 .sv-hero p { margin: 0 !important; text-align: center; }
 .sv-hero .sv-kicker { color: #5ee7ef; font-weight: 600; font-size: clamp(.7rem, 2.7vw, .85rem); letter-spacing: .3em; padding-left: .3em; line-height: 1.9; margin-bottom: .9rem !important; }
@@ -92,9 +95,10 @@ HERO = """
 def show_welcome():
     """Draw the welcome page, or return at once if the visitor already started."""
 
-    # Remember if the visitor already pressed Start (also works after a page refresh)
+    # A new visit always begins on the welcome page. (The Home button in the
+    # sidebar sets this back to False, so it shows the welcome page again.)
     if "started" not in st.session_state:
-        st.session_state.started = st.query_params.get("page") == "app"
+        st.session_state.started = False
 
     # An empty box that we can clear instantly when Start is pressed
     landing = st.empty()
@@ -109,7 +113,6 @@ def show_welcome():
 
     if start_clicked:
         st.session_state.started = True
-        st.query_params["page"] = "app"
         landing.empty()  # remove the welcome page right now
     else:
         # Stop here: the models are NOT loaded until the visitor presses Start
