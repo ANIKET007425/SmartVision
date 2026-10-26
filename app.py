@@ -133,65 +133,8 @@ h1 { text-shadow: 0 0 18px rgba(255,62,165,.55); }
 )
 # ---------------- Welcome (landing) page ----------------
 
-# Remember if the visitor already pressed Start (also works after a page refresh)
-if "started" not in st.session_state:
-    st.session_state.started = st.query_params.get("page") == "app"
-
-# An empty box that we can clear instantly when Start is pressed
-landing = st.empty()
-
-if not st.session_state.started:
-    with landing.container():
-        st.markdown(
-            """
-<style>
-.block-container, [data-testid="stMainBlockContainer"] {
-  background: transparent; border: none; box-shadow: none; backdrop-filter: none;
-}
-.sv-hero { text-align: center; padding-top: 8vh; animation: sv-fade 1.6s ease both; }
-@keyframes sv-fade { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-.sv-kicker { color: #5ee7ef; letter-spacing: .38em; font-size: .85rem; font-weight: 600; margin-bottom: .8rem; }
-h1.sv-welcome { font-size: clamp(2rem, 6vw, 4.4rem); font-weight: 800; letter-spacing: .12em; line-height: 1.15; margin: 0 0 1.2rem 0; padding: 0; text-shadow: 0 0 24px rgba(255,62,165,.55), 0 0 60px rgba(123,77,255,.45); }
-h1.sv-welcome span { color: #ff7ac6; text-shadow: 0 0 28px rgba(255,62,165,.95), 0 0 70px rgba(255,62,165,.5); animation: sv-flicker 7s infinite; }
-@keyframes sv-flicker { 0%,18%,22%,24%,54%,57%,100% { opacity: 1; } 20%,23%,55.5% { opacity: .55; } }
-.sv-hero p { text-align: center; }
-.sv-hero .sv-sub { max-width: 640px; margin-left: auto !important; margin-right: auto !important; margin-bottom: 1.6rem !important; color: #d9d0ee; font-size: 1.08rem; line-height: 1.6; }
-.sv-chips { display: flex; flex-wrap: wrap; gap: .7rem; justify-content: center; margin-bottom: 2rem; }
-.sv-chips span { padding: .45rem 1rem; border-radius: 999px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14); font-size: .95rem; }
-div.stButton { display: flex; justify-content: center; }
-[data-testid="stElementContainer"]:has(.stButton), .element-container:has(.stButton) { width: 100% !important; display: flex; justify-content: center; }
-div.stButton > button { background: linear-gradient(90deg, #ff3ea5, #7b4dff); border: 0; padding: .8rem 2.2rem; border-radius: 999px; box-shadow: 0 0 22px rgba(255,62,165,.55), 0 0 60px rgba(123,77,255,.35); transition: transform .2s ease, box-shadow .2s ease; }
-div.stButton > button, div.stButton > button p { color: #fff !important; font-size: 1.1rem; font-weight: 700; letter-spacing: .08em; }
-div.stButton > button:hover { transform: translateY(-2px) scale(1.04); box-shadow: 0 0 30px rgba(255,62,165,.8), 0 0 80px rgba(123,77,255,.5); }
-@media (prefers-reduced-motion: reduce) { .sv-hero, h1.sv-welcome span { animation: none; } }
-</style>
-""",
-            unsafe_allow_html=True
-        )
-
-        st.markdown(
-            """
-<div class="sv-hero">
-<p class="sv-kicker">AI VISION · OBJECTS · EMOTION · AGE</p>
-<h1 class="sv-welcome">WELCOME TO<br><span>SMART VISION</span></h1>
-<p class="sv-sub">Upload a photo or use your camera. SmartVision finds everyday objects, reads the emotion on a face and estimates an age range.</p>
-<div class="sv-chips"><span>🎯 Object detection</span><span>🙂 Emotion analysis</span><span>🎂 Age range</span></div>
-</div>
-""",
-            unsafe_allow_html=True
-        )
-
-        left, middle, right = st.columns([1, 1, 1])
-        with middle:
-            start_clicked = st.button("🚀 Start SmartVision")
-
-    if start_clicked:
-        st.session_state.started = True
-        st.query_params["page"] = "app"
-        landing.empty()  # remove the welcome page right now
-    else:
-        # Stop here: the models are NOT loaded until the visitor presses Start
-        st.stop()
+from welcome_page import show_welcome
+show_welcome()
 
 st.title("🧠 SmartVision")
 st.write(
