@@ -57,6 +57,28 @@ TAG_DATETIME_ORIGINAL, TAG_DATETIME_DIGITIZED = 0x9003, 0x9004
 TAG_MAKERNOTE = 0x927C
 TAG_OWNER, TAG_BODY_SERIAL, TAG_LENS_MODEL, TAG_LENS_SERIAL = 0xA430, 0xA431, 0xA434, 0xA435
 
+# Other fields that can give something away (tag number -> plain-English label)
+TIME_ZONE_LABEL = "Time-zone offset (hints at the country)"
+PRIVATE_LABELS = {
+    0x010E: "Picture description text",
+    0x013C: "Name of the computer / device that saved the photo",
+    0x9286: "User comment text",
+    0xA420: "Unique picture ID",
+    0x9C9B: "Windows title",
+    0x9C9C: "Windows comment",
+    0x9C9D: "Windows author (a name)",
+    0x9C9E: "Windows keywords",
+    0x9C9F: "Windows subject",
+    0x9010: TIME_ZONE_LABEL, 0x9011: TIME_ZONE_LABEL, 0x9012: TIME_ZONE_LABEL,
+    TAG_MAKERNOTE: "Maker note (extra data from the camera maker)",
+}
+# Every field we count as "private" (everything else, like picture size or direction, is only technical)
+PRIVATE_TAGS = {
+    TAG_MAKE, TAG_MODEL, TAG_SOFTWARE, TAG_DATETIME, TAG_ARTIST, TAG_COPYRIGHT,
+    TAG_DATETIME_ORIGINAL, TAG_DATETIME_DIGITIZED, TAG_OWNER, TAG_BODY_SERIAL,
+    TAG_LENS_MODEL, TAG_LENS_SERIAL, 0x9290, 0x9291, 0x9292,
+} | set(PRIVATE_LABELS)
+
 # Things in image.info that are only technical (not private)
 TECHNICAL_INFO_KEYS = {
     "dpi", "icc_profile", "exif", "xmp", "jfif", "jfif_version", "jfif_unit", "jfif_density",
@@ -89,6 +111,12 @@ def safe_text(value, limit=80):
     if len(text) > limit:
         text = text[: limit - 1] + "…"
     return text
+
+
+def md_escape(text):
+    """Put a backslash in front of every character that Markdown treats as special,
+    so text from a photo is always shown as plain text (never bold, links or :emoji:)."""
+    return re.sub(r"([\\`*_{}\[\]()#+\-.!|~<>$&:])", r"\\\1", str(text))
 
 
 def _number(v):
@@ -165,7 +193,7 @@ def read_metadata(data):
 
     Returns a dict:
       format, size, device, taken_at, gps, serial, names, software, lens,
-      other_notes (XMP / text notes), tags (every EXIF field, as text),
+      other_notes (XMP / text notes / easy-to-miss extras), tags (every EXIF field as (name, value, is_private)),
       level ("none" | "medium" | "high")
     """
     img = _open_checked(data)
@@ -218,13 +246,29 @@ def read_metadata(data):
         if isinstance(value, (str, bytes)) and value:
             other_notes.append(f"Text note \"{safe_text(key, 30)}\": {safe_text(value, 60)}")
 
+    # Private things that are easy to miss
+    for tag, label in PRIVATE_LABELS.items():
+        for source in (base, exif_ifd):
+            if source.get(tag) not in (None, "", b"") and label not in other_notes:
+                other_notes.append(label)
+    if any(k != 0 for k in gps_ifd) and not parse_gps(gps_ifd):      # key 0 is only the GPS version number
+        other_notes.append("GPS fields are present, but without an exact position")
+    raw_exif = info.get("exif")
+    if isinstance(raw_exif, (bytes, bytearray)) and b"\xff\xd8\xff" in raw_exif[6:]:
+        other_notes.append("A small preview picture is hidden inside the file (it can show the original, uncropped photo)")
+
+    # Every field, marked private or only technical
     tags = []
     for source, lookup in ((base, ExifTags.TAGS), (exif_ifd, ExifTags.TAGS), (gps_ifd, ExifTags.GPSTAGS)):
         for tag, value in source.items():
-            if tag in (TAG_EXIF_IFD, TAG_GPS_IFD, TAG_MAKERNOTE):
+            if tag in (TAG_EXIF_IFD, TAG_GPS_IFD):
                 continue
             name = lookup.get(tag, f"Tag 0x{tag:04X}") if isinstance(tag, int) else str(tag)
-            tags.append((safe_text(name, 40), safe_text(value, 100)))
+            if source is gps_ifd:
+                private = tag != 0
+            else:
+                private = tag in PRIVATE_TAGS
+            tags.append((safe_text(name, 40), safe_text(value, 100), private))
 
     result = {
         "format": img.format or "?",
@@ -433,18 +477,25 @@ def _metadata_tab():
     else:
         st.success("✅ No hidden location, phone, time or name found in this file.")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("📍 Location", "FOUND" if info["gps"] else "None")
-    with col2:
-        st.metric("📱 Phone / camera", info["device"] or "None")
-    with col3:
-        st.metric("🕒 Taken at", info["taken_at"] or "None")
-
+    # A short list (it stays small on a phone screen)
     if info["gps"]:
-        gps = info["gps"]
-        st.write(f"Exact spot stored in the photo: **{gps['lat']:.5f}, {gps['lon']:.5f}**")
-        st.markdown(f"[🗺️ Open this spot on a map]({gps['map_url']})")
+        where = f"FOUND ({info['gps']['lat']:.5f}, {info['gps']['lon']:.5f})"
+    else:
+        where = "None"
+    st.markdown(
+        f"- 📍 **Location:** {md_escape(where)}\n"
+        f"- 📱 **Phone / camera:** {md_escape(info['device'] or 'None')}\n"
+        f"- 🕒 **Taken at:** {md_escape(info['taken_at'] or 'None')}"
+    )
+    if info["gps"]:
+        st.markdown(f"[🗺️ Open this spot on a map]({info['gps']['map_url']})")
+    else:
+        st.caption(
+            "No location here? Some phones remove the location before the browser hands over the photo, "
+            "mostly when you pick it from the Gallery / Photos app. To be sure, choose the file from the "
+            "Files / Downloads app, or upload it from a computer. Also remember that a file name like "
+            "IMG_20261028_094535 can show the date and time."
+        )
 
     extra = []
     if info["serial"]:
@@ -461,8 +512,17 @@ def _metadata_tab():
         st.code("\n".join(extra), language=None)
 
     if info["tags"]:
-        with st.expander(f"See every hidden field ({len(info['tags'])})"):
-            st.code("\n".join(f"{name}: {value}" for name, value in info["tags"]), language=None)
+        private_tags = [(n, v) for n, v, is_private in info["tags"] if is_private]
+        technical_tags = [(n, v) for n, v, is_private in info["tags"] if not is_private]
+        if private_tags:
+            with st.expander(f"See every hidden field ({len(info['tags'])})"):
+                lines = [f"⚠ {n}: {v}" for n, v in private_tags] + [f"  {n}: {v}" for n, v in technical_tags]
+                st.code("\n".join(lines), language=None)
+                st.caption("⚠ = can give something away. The others are only technical (picture size, direction...).")
+        else:
+            with st.expander(f"{len(technical_tags)} technical fields found - not private"):
+                st.code("\n".join(f"{n}: {v}" for n, v in technical_tags), language=None)
+                st.caption("These only describe the picture (size, direction...). They do not tell anything about you.")
 
     st.subheader("🧹 Remove the hidden data")
     if info["level"] == "none":
