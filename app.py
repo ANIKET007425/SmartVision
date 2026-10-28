@@ -428,7 +428,7 @@ def show_face_results(age_range, dominant, dominant_score, emotions):
 
 mode = st.radio(
     "Choose mode:",
-    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam","ℹ️How it works"]
+    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam","🔒 Privacy Tools","ℹ️How it works"]
 )
 
 # ---------------- 1. Upload Image ----------------
@@ -542,3 +542,6 @@ elif mode == "🎥 Live Webcam":
 elif "How it works" in mode:
     from how_it_works import show_how_it_works
     show_how_it_works()
+elif "Privacy Tools" in mode:
+    from privacy_tools import show_privacy_tools
+    show_privacy_tools()    
