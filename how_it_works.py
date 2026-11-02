@@ -97,10 +97,11 @@ LIVE = """
 <ol class="hiw-live">
 <li><b>Your browser</b> opens the camera, after you press Allow.</li>
 <li>The video travels to the SmartVision server using <b>WebRTC</b>, the same technology as video calls.</li>
-<li>The server runs the object detector on the <b>newest frame</b> only, about every 0.3 seconds. Older frames are skipped, so the video never freezes while the AI is thinking.</li>
+<li>The server runs the object detector on the <b>newest frame</b> only, about every 0.5 seconds. Older frames are skipped, so the video never freezes while the AI is thinking.</li>
+<li>If a person is in the picture, about once a second the server also looks at the <b>face</b> and estimates the emotion and an age range. The answers are averaged over a few seconds so one bad frame cannot change them.</li>
 <li>The boxes are drawn on <b>every frame</b> and the video comes back to your screen, with the names listed below the video.</li>
 </ol>
-<p class="hiw-note">Live mode finds <b>objects only</b> (no emotion or age), because that keeps it fast. The video is processed in memory and thrown away. Nothing is recorded or saved, and pressing STOP ends it.</p>
+<p class="hiw-note">The <b>Video quality</b> choice sets the size of the camera picture. A small picture (Smooth) is the best choice on a phone or a slow network. The age and emotion in live mode are rough estimates and can be switched off in the sidebar if the video is not smooth. The video is processed in memory and thrown away. Nothing is recorded or saved, and pressing STOP ends it.</p>
 </div>
 """
 
@@ -108,6 +109,7 @@ SLIDERS = """
 - **Confidence:** every box gets a score from 0 to 1. Boxes below the slider are hidden. A higher value shows fewer but surer boxes. A lower value finds more things, but also makes more mistakes.
 - **Image size (320 or 480):** the picture is shrunk to this size before the detector looks at it. 480 sees small things (like a pen) better. 320 is faster.
 - **Live: detect every (seconds):** how often Live Webcam runs the detector. A smaller number updates the boxes more often, but the server works harder.
+- **Live: show age and emotion:** switches the face estimates in Live Webcam on or off. Off = lighter for the server and smoother video.
 """
 
 HOW_WORDS = """
