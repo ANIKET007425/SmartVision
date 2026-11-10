@@ -21,6 +21,8 @@ opencv-python==4.10.0.84
 opencv-contrib-python-headless==4.10.0.84
 pillow==13.0.0
 numpy==2.2.6
+# Small age model (age_model.py + models/genderage.onnx). If it is missing the app still works (old age model).
+onnxruntime>=1.20
 
 # --- Other ---
 werkzeug==3.1.9

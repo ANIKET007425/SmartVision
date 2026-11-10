@@ -76,16 +76,16 @@ MODELS = """
 <div class="hiw-card"><span class="hiw-tag">DeepFace</span><h4>🙂 Reads the emotion</h4>
 <p>First it must find a face, then it scores the expression.</p>
 <ul>
-<li>A face finder (MTCNN) looks for a face. If it is less than 50% sure, you get "Face not detected" instead of a made-up answer.</li>
-<li>Then a neural network scores 7 emotions: angry, disgust, fear, happy, sad, surprise and neutral.</li>
-<li>The scores add up to about 100%. The biggest one is the "Dominant Emotion".</li>
+<li>A face finder (MTCNN) looks for a face. If it is less than 50% sure, you get "Face not detected" instead of a made-up answer. If there are several faces, the biggest one is used.</li>
+<li>Then a neural network scores 7 emotions: angry, disgust, fear, happy, sad, surprise and neutral. It scores the face and its mirror image and averages the two, so one odd look cannot decide.</li>
+<li>The scores add up to about 100%. The biggest one is the "Dominant Emotion". If the biggest score is below 40%, the app says "Not sure" and only shows its best guess.</li>
 </ul></div>
 <div class="hiw-card"><span class="hiw-tag">OpenCV age model</span><h4>🎂 Guesses an age range</h4>
 <p>A small model that only looks at the face.</p>
 <ul>
-<li>The face is cut out with a little extra margin and resized to 227 × 227 pixels.</li>
-<li>The model scores 8 age groups: 0-2, 4-6, 8-12, 15-20, 25-32, 38-43, 48-53 and 60-100. The highest score wins.</li>
-<li>It is a guess for a range, not an exact age.</li>
+<li>The face is cut out of the original picture with extra room around it (hair, forehead and chin) and resized to 96 × 96 pixels. A small model (InsightFace "genderage", 1.3 MB) looks at 7 slightly different crops of it, each also as a mirror image, and the median of the 14 answers is the age in years. The app does not use or show its gender guess.</li>
+<li>The age is then put into one of 8 groups: 0-2, 4-6, 8-12, 15-20, 25-32, 38-43, 48-53 and 60-100. If the age is close to the border of two groups, you see both, for example 25-32 or 38-43. The exact guess in years is shown too.</li>
+<li>It is a guess, not an exact age. On a published test the average error of this kind of model was about 7-8 years, and some faces are off by much more. If the 14 answers differ a lot, the app tells you it is not very sure. (If the model file is missing, the app uses the old model instead: 8 groups, 10 looks at 227 × 227 pixels, "not sure" when its best score is below 50%.)</li>
 </ul></div>
 </div>
 </div>
@@ -97,10 +97,11 @@ LIVE = """
 <ol class="hiw-live">
 <li><b>Your browser</b> opens the camera, after you press Allow.</li>
 <li>The video travels to the SmartVision server using <b>WebRTC</b>, the same technology as video calls.</li>
-<li>The server runs the object detector on the <b>newest frame</b> only, about every 0.3 seconds. Older frames are skipped, so the video never freezes while the AI is thinking.</li>
+<li>The server runs the object detector on the <b>newest frame</b> only, about every 0.5 seconds. Older frames are skipped, so the video never freezes while the AI is thinking.</li>
+<li>If a person is in the picture, about once a second the server also looks at the <b>face</b> and estimates the emotion and an age range. The answers are averaged over a few seconds so one bad frame cannot change them.</li>
 <li>The boxes are drawn on <b>every frame</b> and the video comes back to your screen, with the names listed below the video.</li>
 </ol>
-<p class="hiw-note">Live mode finds <b>objects only</b> (no emotion or age), because that keeps it fast. The video is processed in memory and thrown away. Nothing is recorded or saved, and pressing STOP ends it.</p>
+<p class="hiw-note">The <b>Video quality</b> choice sets the size of the camera picture. A small picture (Smooth) is the best choice on a phone or a slow network. The age and emotion in live mode are rough estimates and can be switched off in the sidebar if the video is not smooth. The video is processed in memory and thrown away. Nothing is recorded or saved, and pressing STOP ends it.</p>
 </div>
 """
 
@@ -108,6 +109,7 @@ SLIDERS = """
 - **Confidence:** every box gets a score from 0 to 1. Boxes below the slider are hidden. A higher value shows fewer but surer boxes. A lower value finds more things, but also makes more mistakes.
 - **Image size (320 or 480):** the picture is shrunk to this size before the detector looks at it. 480 sees small things (like a pen) better. 320 is faster.
 - **Live: detect every (seconds):** how often Live Webcam runs the detector. A smaller number updates the boxes more often, but the server works harder.
+- **Live: show age and emotion:** switches the face estimates in Live Webcam on or off. Off = lighter for the server and smoother video.
 """
 
 HOW_WORDS = """
@@ -122,7 +124,7 @@ LIMITS = """
   Light, camera angle, glasses, make-up and photo quality can all change the answer.
 - **Small or partly hidden objects can be missed.** Try Image size 480 and move closer to the camera.
 - **Your pictures are not saved.** A photo you upload or take is sent to the SmartVision server, analysed in memory
-  and not stored by the app. Big photos are shrunk to at most 640 pixels for the face step to save memory.
+  and not stored by the app. Big photos are shrunk to at most 640 pixels when the face is searched (to save memory); the age and emotion are then read from the original picture.
 - **The first start is slower.** The models are loaded once, and after that they are reused.
 """
 

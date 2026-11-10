@@ -13,9 +13,14 @@ except Exception:
     pass
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 from ultralytics import YOLOWorld
 from deepface import DeepFace
+# Better age and emotion for photos (see photo_faces.py) and the 3D dashboard page
+from face_boost import get_age_net
+from photo_faces import choose_face, read_face
+from age_model import predict_age
+from dashboard_page import show_dashboard, record_photo, photo_key
 
 # ---------------- Page Setup ----------------
 
@@ -169,53 +174,9 @@ def load_yolo_world():
 
 yolo_model = load_yolo_world()
 
-# ---------------- Age Model (small, OpenCV) ----------------
-
-MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
-AGE_PROTO = os.path.join(MODELS_DIR, "age_deploy.prototxt")
-AGE_MODEL = os.path.join(MODELS_DIR, "age_net.caffemodel")
-
-AGE_RANGES = ["0-2", "4-6", "8-12", "15-20", "25-32", "38-43", "48-53", "60-100"]
-AGE_MEAN = (78.4263377603, 87.7689143744, 114.895847746)
-
-@st.cache_resource
-def load_age_model():
-    # If the model files are missing, the app still runs (age is just skipped)
-    if not (os.path.exists(AGE_PROTO) and os.path.exists(AGE_MODEL)):
-        return None
-    try:
-        return cv2.dnn.readNetFromCaffe(AGE_PROTO, AGE_MODEL)
-    except Exception as e:
-        # Do not crash the whole app if this OpenCV version cannot load the model
-        print("Age model could not be loaded:", type(e).__name__, e)
-        return None
-
-age_net = load_age_model()
-
-def estimate_age(frame, region):
-    if age_net is None:
-        return None
-
-    h, w = frame.shape[:2]
-    x, y = int(region["x"]), int(region["y"])
-    fw, fh = int(region["w"]), int(region["h"])
-
-    # Take a little extra area around the face
-    pad = int(0.2 * max(fw, fh))
-    x1, y1 = max(0, x - pad), max(0, y - pad)
-    x2, y2 = min(w, x + fw + pad), min(h, y + fh + pad)
-
-    face_img = frame[y1:y2, x1:x2]
-    if face_img.size == 0:
-        return None
-
-    blob = cv2.dnn.blobFromImage(
-        face_img, 1.0, (227, 227), AGE_MEAN, swapRB=False
-    )
-    age_net.setInput(blob)
-    predictions = age_net.forward()[0]
-
-    return AGE_RANGES[int(predictions.argmax())]
+# ---------------- Age Model ----------------
+# The small OpenCV age model is now loaded and used by face_boost.py (get_age_net),
+# the same copy that Live Webcam uses, so it is only in memory once.
 
 # ---------------- Helper: Tie Colour ----------------
 
@@ -359,76 +320,130 @@ def analyze_objects(frame):
     return annotated_rgb, details
 
 # ---------------- Helper: Face Analysis ----------------
+# The real work (age with the small ONNX model, emotion with a mirror image, "Not sure")
+# is in photo_faces.py and age_model.py. Here we only find the faces and show the answer.
 
 def analyze_face(frame):
+    """Returns a dict (see photo_faces.read_face), or None if no real face was found."""
     try:
-        # Resize large images to reduce memory usage
+        # Find the face on a smaller copy (saves memory) ...
         h, w = frame.shape[:2]
+        scale = 1.0
+        small = frame
         if max(h, w) > 640:
             scale = 640 / max(h, w)
-            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+            small = cv2.resize(frame, (int(w * scale), int(h * scale)))
+
         analysis = DeepFace.analyze(
-            frame,
+            small,
             actions=["emotion"],
             enforce_detection=False,
             detector_backend="mtcnn",
             silent=True
         )
+        if isinstance(analysis, dict):
+            analysis = [analysis]
 
-        if analysis:
-            face = analysis[0]
+        # Face finder less than 50% sure -> "Face not detected". With several faces
+        # the BIGGEST real face is used.
+        face, count = choose_face(analysis)
+        if face is None:
+            return None
 
-            # No real face found -> confidence is 0
-            if face.get("face_confidence", 1) < 0.5:
-                return None, None, None, None
-
-            dominant = str(face["dominant_emotion"])
-            emotions = face["emotion"]
-            dominant_score = float(emotions[dominant])
-            age_range = estimate_age(frame, face["region"])
-
-            return age_range, dominant, dominant_score, emotions
+        # ... but read the age and emotion from the ORIGINAL picture (sharper).
+        result = read_face(frame, face, scale=scale, net=get_age_net, age_fn=predict_age)
+        if result is not None:
+            result["faces"] = count
+        return result
 
     except Exception as e:
-        st.error(f"Face not detected: {type(e).__name__} — {e}")
+        if isinstance(e, TypeError) and "age_fn" in str(e):
+            st.error(
+                "photo_faces.py is the OLD version. Replace the whole file with the new "
+                "photo_faces.py (it must contain the word age_fn), keep it in the same folder "
+                "as app.py, then stop Streamlit (Ctrl+C) and run it again."
+            )
+        else:
+            st.error(f"Face not detected: {type(e).__name__} — {e}")
     finally:
         gc.collect()
 
-    return None, None, None, None
+    return None
 
 # ---------------- Helper: Show Face Results ----------------
 
-def show_face_results(age_range, dominant, dominant_score, emotions):
-    if dominant is None:
+def show_face_results(result):
+    if result is None:
         st.info("Face not detected.")
         return
+
+    if result.get("faces", 1) > 1:
+        st.caption(f"{result['faces']} faces found. The biggest face is analysed.")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.metric("Estimated Age", age_range if age_range else "N/A")
+        st.metric("Estimated Age", result["age_text"] if result["age_text"] else "N/A")
+        age = result["age"]
+        if age is not None:
+            if age.get("years") is not None:
+                st.caption(f"Model's guess: about {age['years']:.0f} years (on a published test this kind of model was off by about 7-8 years on average).")
+            if not age["sure"]:
+                st.caption(age.get("note") or "The model is not very sure about this age.")
+            if age.get("source") == "caffe":
+                st.warning(
+                    "The older, weaker age model was used because models/genderage.onnx could not be "
+                    "loaded. Run  python get_age_model.py  once, install onnxruntime, then restart the app."
+                )
 
     with col2:
-        st.metric(
-            "Dominant Emotion",
-            dominant.capitalize(),
-            f"{dominant_score:.1f}%"
+        emotion = result["emotion"]
+        if emotion is None:
+            st.metric("Dominant Emotion", "N/A")
+        elif emotion["sure"]:
+            st.metric(
+                "Dominant Emotion",
+                emotion["name"],
+                f"{emotion['confidence'] * 100:.1f}%"
+            )
+        else:
+            st.metric("Dominant Emotion", "Not sure")
+            st.caption(f"Best guess: {emotion['name']} ({emotion['confidence'] * 100:.0f}%)")
+
+    if result["emotion_scores"]:
+        st.subheader("📊 Emotion Confidence")
+
+        for label, score in result["emotion_scores"]:
+            st.progress(min(score / 100.0, 1.0))
+            st.write(f"**{label}**: {score:.1f}%")
+
+    if result.get("face_rgb") is not None:
+        with st.expander("🔍 The face the model looked at"):
+            st.image(result["face_rgb"], width=160)
+            st.caption("If this is not a clear, upright face, the age and emotion will be wrong. Try another photo.")
+
+    st.caption(
+        "Age and emotion are estimates and can be wrong. For the best result: "
+        "face the camera, use good light, and keep the face big and sharp."
+    )
+
+def count_for_dashboard(details, result, photo):
+    """Tell the dashboard what this photo contained (never breaks the page)."""
+    try:
+        record_photo(
+            details,
+            result["emotion_text"] if result else None,
+            result["age_text"] if result else None,
+            key=photo_key(photo)
         )
-
-    st.subheader("📊 Emotion Confidence")
-
-    for emotion, score in emotions.items():
-        score = float(score)
-        progress_value = min(score / 100.0, 1.0)
-
-        st.progress(progress_value)
-        st.write(f"**{emotion.capitalize()}**: {score:.1f}%")
+    except Exception:
+        pass
 
 # ---------------- Mode Selection ----------------
 
 mode = st.radio(
     "Choose mode:",
-    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam","🔒 Privacy Tools","ℹ️How it works"]
+    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam","📊 Dashboard","🔒 Privacy Tools","ℹ️How it works"]
 )
 
 # ---------------- 1. Upload Image ----------------
@@ -442,7 +457,7 @@ if mode == "🖼️ Upload Image":
 
     if uploaded_file is not None:
         try:
-            image = Image.open(uploaded_file).convert("RGB")
+            image = ImageOps.exif_transpose(Image.open(uploaded_file)).convert("RGB")
         except Exception as e:
             st.error(f"The image did not open: {e}")
             st.stop()
@@ -479,9 +494,10 @@ if mode == "🖼️ Upload Image":
         st.subheader("🙂 Face Analysis")
 
         with st.spinner("Face emotion and age are being analyzed..."):
-            age_range, dominant, dominant_score, emotions = analyze_face(frame)
+            face_result = analyze_face(frame)
 
-        show_face_results(age_range, dominant, dominant_score, emotions)
+        show_face_results(face_result)
+        count_for_dashboard(details, face_result, uploaded_file)
 
 # ---------------- 2. Camera Capture ----------------
 
@@ -491,7 +507,7 @@ elif mode == "📸 Camera Capture":
 
     if camera_photo is not None:
         try:
-            image = Image.open(camera_photo).convert("RGB")
+            image = ImageOps.exif_transpose(Image.open(camera_photo)).convert("RGB")
         except Exception as e:
             st.error(f"The camera image did not open: {e}")
             st.stop()
@@ -528,9 +544,10 @@ elif mode == "📸 Camera Capture":
         st.subheader("🙂 Face Analysis")
 
         with st.spinner("Face emotion and age are being analyzed..."):
-            age_range, dominant, dominant_score, emotions = analyze_face(frame)
+            face_result = analyze_face(frame)
 
-        show_face_results(age_range, dominant, dominant_score, emotions)
+        show_face_results(face_result)
+        count_for_dashboard(details, face_result, camera_photo)
 
 # ---------------- 3. Live Webcam ----------------
 
@@ -544,4 +561,6 @@ elif "How it works" in mode:
     show_how_it_works()
 elif "Privacy Tools" in mode:
     from privacy_tools import show_privacy_tools
-    show_privacy_tools()    
+    show_privacy_tools()
+elif "Dashboard" in mode:
+    show_dashboard()
