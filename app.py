@@ -386,7 +386,7 @@ def show_face_results(result):
         st.metric("Estimated Age", result["age_text"] if result["age_text"] else "N/A")
         age = result["age"]
         if age is not None:
-            if age.get("years") is not None:
+            if age.get("years") is not None and not age.get("child_check"):
                 st.caption(f"Model's guess: about {age['years']:.0f} years (on a published test this kind of model was off by about 7-8 years on average).")
             if not age["sure"]:
                 st.caption(age.get("note") or "The model is not very sure about this age.")

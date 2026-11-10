@@ -11,6 +11,9 @@ already uses better habits. This file gives the same habits to photos:
     ONNX age model (age_model.py) looks at 14 slightly different crops of it and the
     median age is used. If that model is not available, the old 8-group model looks at the
     face 10 times (centre + 4 corners, each also mirrored) and averages them.
+    The ONNX model is weak with young children, so when it says "35 years or less" the old
+    model is asked for a second opinion; if the old model says "child", the page shows both
+    ("4-6 or 25-32") and says it is not sure.
   * Emotion: the face and its mirror image are both analysed and averaged. If the
     best emotion is below 40 % the page says "Not sure" instead of a confident
     wrong label.
@@ -29,6 +32,7 @@ import numpy as np
 
 from age_model import describe_years
 from face_boost import (
+    AGE_RANGES,
     EMOTION_LABELS,
     EMOTIONS,
     age_probabilities,
@@ -43,6 +47,14 @@ MIN_FACE_CONFIDENCE = 0.5
 
 AGE_MARGIN = 0.25      # extra picture around the face for the age network
 EMOTION_MARGIN = 0.08  # emotion likes a tighter crop
+
+# Young children are the weak spot of the small ONNX age model: it often says "about 28"
+# for a 4-year-old. The older 8-group model is better with children (its groups start at
+# 0-2, 4-6, 8-12), so it is asked for a SECOND OPINION, but only when the ONNX model says
+# the person is young (35 years or less). An elderly face is never touched by this.
+CHILD_CHECK_MAX_YEARS = 35.0
+CHILD_CHECK_MASS = 0.50   # the old model must put at least this much on the 3 child groups
+CHILD_GROUPS = 3          # AGE_RANGES[:3] = 0-2, 4-6, 8-12
 
 
 def _region(face):
@@ -121,6 +133,49 @@ def _thumbnail(face_bgr, size=192):
     return cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
 
+def child_second_opinion(age, original_bgr, box, net):
+    """If the ONNX age is young (<= 35) and the OLD model thinks "child", say so.
+
+    Changes `age` in place and returns True when it did. Never raises: a missing or broken
+    old model simply means "no second opinion".
+    """
+    if age is None or net is None or age.get("source") != "onnx":
+        return False
+    years = age.get("years")
+    if years is None or years > CHILD_CHECK_MAX_YEARS:
+        return False
+    if years_is_child_group(age):
+        return False
+    try:
+        old_net = net() if callable(net) else net
+        crop = crop_face(original_bgr, box, margin=AGE_MARGIN) if old_net is not None else None
+        probs = age_probabilities(old_net, crop, fast=False) if crop is not None else None
+    except Exception:
+        return False
+    if probs is None or len(probs) < CHILD_GROUPS:
+        return False
+    child_mass = float(np.sum(probs[:CHILD_GROUPS]))
+    if child_mass < CHILD_CHECK_MASS:
+        return False
+    child_group = AGE_RANGES[int(np.argmax(probs[:CHILD_GROUPS]))]
+    main_group = age["text"].split(" or ")[0]
+    age["text"] = f"{child_group} or {main_group}"
+    age["sure"] = False
+    age["child_check"] = round(child_mass, 2)
+    age["source"] = "onnx+caffe"
+    age["note"] = (
+        "The main age model is weak with young children, and the older model thinks this face "
+        "may be a child. So this age is not sure."
+    )
+    return True
+
+
+def years_is_child_group(age):
+    """True if the ONNX answer already starts with one of the 3 child groups."""
+    first = (age.get("text") or "").split(" or ")[0]
+    return first in AGE_RANGES[:CHILD_GROUPS]
+
+
 def read_face(original_bgr, face, scale=1.0, net=None, emotion_fn=None, age_fn=None):
     """Read age and emotion of one face.
 
@@ -150,6 +205,7 @@ def read_face(original_bgr, face, scale=1.0, net=None, emotion_fn=None, age_fn=N
         if found is not None:
             age = describe_years(found["years"], found.get("low"), found.get("high"))
             seen = found.get("face")
+            child_second_opinion(age, original_bgr, box, net)
 
     # ... and the old 8-group model (10 looks, averaged) as the backup
     if age is None and net is not None:

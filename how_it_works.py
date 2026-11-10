@@ -85,6 +85,7 @@ MODELS = """
 <ul>
 <li>The face is cut out of the original picture with extra room around it (hair, forehead and chin) and resized to 96 × 96 pixels. A small model (InsightFace "genderage", 1.3 MB) looks at 7 slightly different crops of it, each also as a mirror image, and the median of the 14 answers is the age in years. The app does not use or show its gender guess.</li>
 <li>The age is then put into one of 8 groups: 0-2, 4-6, 8-12, 15-20, 25-32, 38-43, 48-53 and 60-100. If the age is close to the border of two groups, you see both, for example 25-32 or 38-43. The exact guess in years is shown too.</li>
+<li>This small model is weak with young children (it can say "about 28" for a 4-year-old). So when it says 35 years or less, the older model is asked for a second opinion. If the older model thinks "child", the page shows both groups (for example 4-6 or 25-32) and says it is not sure.</li>
 <li>It is a guess, not an exact age. On a published test the average error of this kind of model was about 7-8 years, and some faces are off by much more. If the 14 answers differ a lot, the app tells you it is not very sure. (If the model file is missing, the app uses the old model instead: 8 groups, 10 looks at 227 × 227 pixels, "not sure" when its best score is below 50%.)</li>
 </ul></div>
 </div>

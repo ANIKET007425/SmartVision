@@ -431,6 +431,67 @@ result = analyze_face(small_pic)
 check("analyze_face: the ONNX age is used when the model answers", result["age"]["source"] == "onnx" and result["age_text"] == "60-100")
 GLUE_AGE["answer"] = None
 
+# ---- child second opinion (the ONNX model is weak with young children)
+young = lambda img, box: {"years": 28.0, "low": 26.0, "high": 30.0, "face": face_img_bgr}   # noqa: E731
+emo_ok = lambda c: emo_vec("happy", 0.8)   # noqa: E731
+
+kid = pf.read_face(PICTURE, f, net=FakeNet(age_vec(1, 0.80)), emotion_fn=emo_ok, age_fn=young)
+check("child check: young ONNX age + old model says child -> both groups, not sure",
+      kid["age_text"] == "4-6 or 25-32" and kid["age"]["sure"] is False and kid["age"]["source"] == "onnx+caffe", str(kid["age"]))
+check("child check: the note explains it and the mass is stored", "weak with young children" in kid["age"]["note"] and kid["age"]["child_check"] >= 0.8, str(kid["age"]))
+check("child check: the exact ONNX years are kept", abs(kid["age"]["years"] - 28.0) < 1e-9)
+
+kid2 = pf.read_face(PICTURE, f, net=FakeNet(age_vec(0, 0.35, second=1, second_strength=0.30)), emotion_fn=emo_ok, age_fn=young)
+check("child check: the child group with the most weight is named (0-2 here)", kid2["age_text"].startswith("0-2 or "), kid2["age_text"])
+
+adult = pf.read_face(PICTURE, f, net=FakeNet(age_vec(4, 0.80)), emotion_fn=emo_ok, age_fn=young)
+check("child check: old model says adult -> ONNX answer untouched", adult["age_text"] == "25-32" and adult["age"]["source"] == "onnx" and "child_check" not in adult["age"], str(adult["age"]))
+
+weak = pf.read_face(PICTURE, f, net=FakeNet(age_vec(1, 0.20, second=4, second_strength=0.50)), emotion_fn=emo_ok, age_fn=young)
+check("child check: old model only a little child-ish (< 50%) -> untouched", weak["age_text"] == "25-32" and weak["age"]["sure"], str(weak["age"]))
+
+loads = []
+def _counting_loader():
+    """Counts how often the old model is asked for (the code swallows errors, so a counter is the proof)."""
+    loads.append(1)
+    return None
+old_man = pf.read_face(PICTURE, f, net=_counting_loader, emotion_fn=emo_ok, age_fn=good)
+check("child check: ONNX says 80 -> old model not even loaded, answer untouched", old_man["age_text"] == "60-100" and old_man["age"]["sure"] and not loads)
+
+limit_in = pf.read_face(PICTURE, f, net=FakeNet(age_vec(1, 0.80)), emotion_fn=emo_ok,
+                        age_fn=lambda i, b: {"years": 35.0, "low": 34.0, "high": 36.0, "face": face_img_bgr})
+limit_out = pf.read_face(PICTURE, f, net=_counting_loader, emotion_fn=emo_ok,
+                         age_fn=lambda i, b: {"years": 35.5, "low": 35.0, "high": 36.0, "face": face_img_bgr})
+check("child check: 35.0 is still checked, 35.5 is not", limit_in["age_text"] == "4-6 or 25-32" and not loads and limit_out["age"]["source"] == "onnx", f"{limit_in['age_text']} | {limit_out['age_text']} | loads={len(loads)}")
+
+already = pf.read_face(PICTURE, f, net=_counting_loader, emotion_fn=emo_ok,
+                       age_fn=lambda i, b: {"years": 5.0, "low": 4.5, "high": 5.5, "face": face_img_bgr})
+check("child check: ONNX already says child -> old model not asked, answer untouched",
+      already["age_text"].split(" or ")[0] in ("0-2", "4-6", "8-12") and already["age"]["source"] == "onnx" and "child_check" not in already["age"] and not loads, f"{already['age_text']} loads={len(loads)}")
+
+no_net = pf.read_face(PICTURE, f, net=None, emotion_fn=emo_ok, age_fn=young)
+check("child check: no old model available -> ONNX answer as before", no_net["age_text"] == "25-32" and no_net["age"]["source"] == "onnx")
+
+def _broken():
+    raise RuntimeError("cannot load")
+broken = pf.read_face(PICTURE, f, net=_broken, emotion_fn=emo_ok, age_fn=young)
+check("child check: old model fails to load -> no crash, ONNX answer stays", broken["age_text"] == "25-32")
+
+class _BadNet(FakeNet):
+    def forward(self):
+        raise RuntimeError("forward failed")
+bad_forward = pf.read_face(PICTURE, f, net=_BadNet(age_vec(1, 0.8)), emotion_fn=emo_ok, age_fn=young)
+check("child check: old model crashes while running -> no crash, ONNX answer stays", bad_forward["age_text"] == "25-32")
+
+# the page: no confusing "about 28 years" next to "4-6 or 25-32"
+kid["faces"] = 1
+st.events.clear()
+show_face_results(kid)
+kid_caps = " | ".join(e[1] for e in st.of("caption"))
+kid_metrics = {e[1]: e for e in st.of("metric")}
+check("show: child check -> metric shows both groups", kid_metrics["Estimated Age"][2] == "4-6 or 25-32")
+check("show: child check -> the note is shown, the 'about N years' line is not", "may be a child" in kid_caps and "about 28 years" not in kid_caps, kid_caps)
+
 # ---- show_face_results
 st.events.clear()
 show_face_results(None)
