@@ -16,13 +16,11 @@ mtcnn==1.0.0
 
 # --- Images and numbers ---
 # Keep BOTH OpenCV packages on the SAME version. Some package installs the contrib one;
-# if it is not pinned it becomes 5.x and the age model can no longer load.
+# if it is not pinned it becomes 5.x, which this app was not tested with.
 opencv-python==4.10.0.84
 opencv-contrib-python-headless==4.10.0.84
 pillow==13.0.0
 numpy==2.2.6
-# Small age model (age_model.py + models/genderage.onnx). If it is missing the app still works (old age model).
-onnxruntime>=1.20
 
 # --- Other ---
 werkzeug==3.1.9

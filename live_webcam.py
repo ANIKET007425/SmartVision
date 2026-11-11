@@ -12,13 +12,14 @@ Why it is built this way:
   * Every visitor gets their OWN LiveDetector (kept in st.session_state), so one
     visitor's detections are never shown to another visitor.
 
-V2 changes (smoother video + age and emotion):
+V2 changes (smoother video + emotion):
   * Video quality presets (Smooth / Balanced / Sharp). A smaller picture and
     fewer frames per second travel much better over a phone network.
   * The video callback does almost nothing when there is nothing to draw, and
     the AI worker thread uses at most two processor cores.
-  * Age range and emotion are found for each face (face_boost.py) and are
+  * The emotion is found for each face (face_boost.py) and is
     averaged over a few seconds, so one bad frame cannot flip the label.
+    (The estimated-age feature was removed: age models are often wrong.)
   * A speed meter shows how many frames per second the server really handles.
 
 The class LiveDetector does not need streamlit or av, so it can be tested alone.
@@ -33,11 +34,11 @@ import time
 import cv2
 
 try:
-    import face_boost                   # age + emotion helpers (optional file)
+    import face_boost                   # emotion helpers (optional file)
 except Exception:                       # the live page still works without it
     face_boost = None
 
-LIVE_VERSION = "V2 (smooth video + age and emotion)"
+LIVE_VERSION = "V3 (smooth video + emotion)"
 
 
 def _trace(message):
@@ -89,7 +90,7 @@ ICONS = {
 
 GREEN = (0, 255, 0)        # BGR: person
 ORANGE = (255, 100, 0)     # BGR: everything else (looks blue in BGR order)
-FACE_COLOUR = (255, 0, 200)  # BGR: face box with age and emotion (pink-violet)
+FACE_COLOUR = (255, 0, 200)  # BGR: face box with the emotion (pink-violet)
 
 # Camera size and speed that the browser is asked for. The server sends the
 # picture BACK to the phone, so a smaller picture = less data = smoother video.
@@ -112,7 +113,7 @@ class LiveDetector:
         self.conf = 0.45
         self.imgsz = 320
         self.interval = 0.5             # minimum seconds between two detections
-        self.faces_on = False           # age + emotion (needs face_boost.py)
+        self.faces_on = False           # emotion (needs face_boost.py)
         self.face_interval = 1.0        # minimum seconds between two face analyses
 
         self._lock = threading.Lock()
@@ -131,7 +132,7 @@ class LiveDetector:
         self._detections_done = 0
         self._error = None
 
-        # Faces (age + emotion)
+        # Faces (emotion)
         self._pipeline = face_pipeline  # created on first use if None
         self._faces = []                # dicts from FacePipeline.analyze()
         self._last_face_time = 0.0
@@ -369,7 +370,7 @@ class LiveDetector:
         try:
             if self._pipeline is None:
                 if face_boost is None:
-                    return [], "Age and emotion need the file face_boost.py.", "face_boost.py not found"
+                    return [], "The emotion needs the file face_boost.py.", "face_boost.py not found"
                 self._pipeline = face_boost.FacePipeline()
             faces = self._pipeline.analyze(frame, person_boxes)
             return faces, self._pipeline.status, self._pipeline.error
@@ -734,10 +735,10 @@ def run_live(yolo_model, conf_value, imgsz_value, colour_fn=None):
         help="Smaller = more updates but a slower server. Bigger = smoother video.",
     )
     faces_wanted = st.sidebar.checkbox(
-        "Live: show age and emotion",
+        "Live: show emotion",
         value=True,
         help=(
-            "Finds faces and shows an estimated age range and emotion. "
+            "Finds faces and shows the emotion. "
             "Uses more of the server. Switch it off if the video is not smooth."
         ),
     )
@@ -802,7 +803,7 @@ def run_live(yolo_model, conf_value, imgsz_value, colour_fn=None):
 
     if faces_wanted and face_boost is None:
         st.warning(
-            "Age and emotion are switched off because the file face_boost.py "
+            "The emotion is switched off because the file face_boost.py "
             "is missing from the app folder."
         )
 
@@ -844,8 +845,8 @@ def run_live(yolo_model, conf_value, imgsz_value, colour_fn=None):
                 if debug and info["face_error"]:
                     st.caption(f"Face problem (owner only): {info['face_error']}")
                 st.caption(
-                    "Age and emotion are rough estimates from small AI models. "
-                    "Light, angle and glasses can make them wrong, so they are "
+                    "The emotion is a rough estimate from a small AI model. "
+                    "Light, angle and glasses can make it wrong, so it is "
                     "averaged over a few seconds to stay steady."
                 )
 
@@ -863,7 +864,7 @@ def run_live(yolo_model, conf_value, imgsz_value, colour_fn=None):
                 if info["fps"] < 0.6 * quality["fps"]:
                     st.warning(
                         "The video is arriving slowly. Choose **Smooth** quality, "
-                        "switch off age and emotion, or try a better network."
+                        "switch off the emotion, or try a better network."
                     )
 
         time.sleep(0.5)

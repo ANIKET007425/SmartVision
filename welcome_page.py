@@ -99,10 +99,10 @@ div.stButton > button:hover { transform: translateY(-2px); box-shadow: 0 0 30px 
 
 HERO = """
 <div class="sv-hero">
-<p class="sv-kicker"><span>AI VISION · OBJECTS</span><span class="sv-dot">·</span><span>EMOTION · AGE</span></p>
+<p class="sv-kicker"><span>AI VISION · OBJECTS</span><span class="sv-dot">·</span><span>EMOTION · SECURITY</span></p>
 <h1 class="sv-welcome">WELCOME TO<br><span>SMART VISION</span></h1>
-<p class="sv-sub">Upload a photo, use your camera or go live. SmartVision finds everyday objects, reads the emotion on a face and estimates an age range.</p>
-<div class="sv-chips"><span>🎯 Object detection</span><span>🙂 Emotion analysis</span><span>🎂 Age range</span><span>🎥 Live webcam</span></div>
+<p class="sv-sub">Upload a photo, use your camera or go live. SmartVision finds everyday objects, reads the emotion on a face, and has exact security tools.</p>
+<div class="sv-chips"><span>🎯 Object detection</span><span>🙂 Emotion analysis</span><span>🛡️ Security Lab</span><span>🎥 Live webcam</span></div>
 </div>
 """
 

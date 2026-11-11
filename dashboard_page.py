@@ -5,7 +5,7 @@ How it is used (three small steps, see the bottom of this file for the exact lin
   1. After every photo is analysed, app.py tells the dashboard what was found:
 
          from dashboard_page import record_photo, photo_key
-         record_photo(details, emotion, age, key=photo_key(uploaded_file))
+         record_photo(details, emotion, key=photo_key(uploaded_file), face=True)
 
   2. A new page in the sidebar calls:
 
@@ -18,8 +18,8 @@ How it is used (three small steps, see the bottom of this file for the exact lin
 What the page shows
 -------------------
   * four glass cards with big numbers (photos, objects, faces, most seen object);
-  * three 3D bar charts that sway slowly: objects, emotions, age ranges;
-  * four small cards that describe the AI models of the app.
+  * two 3D bar charts that sway slowly: objects and emotions;
+  * four small cards that describe the models and tools of the app.
 
 It is only HTML + CSS (no JavaScript, no extra package), the same way the
 welcome page works. The CSS 3D comes from `perspective` and `transform-style:
@@ -39,7 +39,6 @@ import re
 
 OBJECT_CLASSES = ["Person", "Glasses", "Pen", "Bag", "Cup", "Phone", "Tie", "Bottle", "Book"]
 EMOTION_CLASSES = ["Happy", "Neutral", "Surprise", "Sad", "Angry", "Fear", "Disgust"]
-AGE_CLASSES = ["0-2", "4-6", "8-12", "15-20", "25-32", "38-43", "48-53", "60-100"]
 
 _OBJECT_ALIASES = {
     "person": "Person",
@@ -53,9 +52,6 @@ _OBJECT_ALIASES = {
     "book": "Book",
 }
 
-# Middle of every age range, to place a single number (for example 27) into a range.
-_AGE_MIDDLE = [1, 5, 10, 17.5, 28.5, 40.5, 50.5, 75]
-
 MAX_BAR_HEIGHT = 170   # px, the tallest bar
 
 SAMPLE_STATS = {
@@ -65,8 +61,6 @@ SAMPLE_STATS = {
                 "Phone": 6, "Tie": 1, "Bottle": 3, "Book": 2},
     "emotions": {"Happy": 5, "Neutral": 4, "Surprise": 1, "Sad": 1,
                  "Angry": 0, "Fear": 0, "Disgust": 0},
-    "ages": {"0-2": 0, "4-6": 0, "8-12": 1, "15-20": 3, "25-32": 5,
-             "38-43": 2, "48-53": 0, "60-100": 0},
 }
 
 
@@ -80,7 +74,6 @@ def new_stats():
         "faces": 0,
         "objects": {name: 0 for name in OBJECT_CLASSES},
         "emotions": {name: 0 for name in EMOTION_CLASSES},
-        "ages": {name: 0 for name in AGE_CLASSES},
         "keys": set(),          # photos already counted (a rerun must not count twice)
     }
 
@@ -146,38 +139,15 @@ def normalize_emotion(value):
     return name if name in EMOTION_CLASSES else None
 
 
-def normalize_age(value):
-    """Accepts '25-32', '25-32 or 38-43', 'Age 8-12' or a single number like 27."""
-    if value is None:
-        return None
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        number = float(value)
-        distances = [abs(number - middle) for middle in _AGE_MIDDLE]
-        return AGE_CLASSES[distances.index(min(distances))]
-    text = str(value)
-    match = re.search(r"(\d+)\s*[-–]\s*(\d+)", text)
-    if match:
-        wanted = f"{int(match.group(1))}-{int(match.group(2))}"
-        if wanted in AGE_CLASSES:
-            return wanted
-        low = int(match.group(1))
-        lows = [int(name.split("-")[0]) for name in AGE_CLASSES]
-        return AGE_CLASSES[min(range(len(lows)), key=lambda i: abs(lows[i] - low))]
-    match = re.search(r"\b(\d{1,3})\b", text)
-    if match:
-        return normalize_age(int(match.group(1)))
-    return None
-
-
-def record_photo(details=None, emotion=None, age=None, labels=None, key=None):
+def record_photo(details=None, emotion=None, labels=None, key=None, face=False):
     """Count one analysed photo. Returns True if it was counted, False if this
     photo (same key) was counted before.
 
     details : the detection lines of app.py (list of text) - or give labels
     labels  : list of object names, for example ["person", "cup"]
     emotion : 'happy', 'Happy 87%', ... (anything that starts with the emotion)
-    age     : '25-32', '25-32 or 38-43' or a number
     key     : photo_key(file), so a rerun does not count the same photo again
+    face    : True if a face was found (counted even when the emotion is "Not sure")
     """
     stats = get_stats()
     if key is not None:
@@ -194,12 +164,9 @@ def record_photo(details=None, emotion=None, age=None, labels=None, key=None):
         stats["objects"][name] += 1
 
     emotion_name = normalize_emotion(emotion)
-    age_name = normalize_age(age)
     if emotion_name:
         stats["emotions"][emotion_name] += 1
-    if age_name:
-        stats["ages"][age_name] += 1
-    if emotion_name or age_name:
+    if emotion_name or face:
         stats["faces"] += 1
 
     stats["photos"] += 1
@@ -348,7 +315,6 @@ def build_dashboard_html(stats, sample=False):
     """The whole dashboard as one HTML text. `stats` looks like new_stats()."""
     objects = [stats["objects"].get(n, 0) for n in OBJECT_CLASSES]
     emotions = [stats["emotions"].get(n, 0) for n in EMOTION_CLASSES]
-    ages = [stats["ages"].get(n, 0) for n in AGE_CLASSES]
 
     parts = ['<div class="sv3">']
     parts.append(
@@ -356,7 +322,7 @@ def build_dashboard_html(stats, sample=False):
         '<p class="sv3-kicker">LIVE STATS · THIS VISIT</p>'
         '<div class="sv3-title">SMART <span>DASHBOARD</span></div>'
         '<p class="sv3-sub">Everything SmartVision found in the photos of this visit: '
-        'objects, emotions and age ranges, drawn as 3D bars.</p>'
+        'objects and emotions, drawn as 3D bars.</p>'
         '</div>'
         '<div class="sv3-cubewrap"><div class="sv3-cube"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>'
         '</div>'
@@ -374,8 +340,7 @@ def build_dashboard_html(stats, sample=False):
     parts.append(
         '<div class="sv3-charts">'
         + build_chart_html("OBJECTS", "How many times each object was found", OBJECT_CLASSES, objects, wide=True)
-        + build_chart_html("EMOTIONS", "Dominant emotion of each face", EMOTION_CLASSES, emotions)
-        + build_chart_html("AGE RANGES", "Estimated age range of each face", AGE_CLASSES, ages)
+        + build_chart_html("EMOTIONS", "Dominant emotion of each face", EMOTION_CLASSES, emotions, wide=True)
         + '</div>'
     )
     parts.append(
@@ -384,15 +349,15 @@ def build_dashboard_html(stats, sample=False):
         '<p class="d">YOLO-World finds a person, glasses, pen, bag, cup, phone, tie, bottle and book.</p></div>'
         '<div class="sv3-card"><p class="k">EMOTION</p><p class="v">7 emotions</p>'
         '<p class="d">DeepFace reads the face. The answer is an estimate, not a fact.</p></div>'
-        '<div class="sv3-card"><p class="k">AGE</p><p class="v">8 ranges</p>'
-        '<p class="d">A small 43.55 MB OpenCV model gives a range, never an exact age.</p></div>'
+        '<div class="sv3-card"><p class="k">SECURITY LAB</p><p class="v">4 tools</p>'
+        '<p class="d">Hidden message, QR reader, file fingerprint and image facts. These are calculations, not guesses.</p></div>'
         '<div class="sv3-card"><p class="k">LIVE WEBCAM</p><p class="v">~0.06 s</p>'
         '<p class="d">One detection on the cloud server (a single test at image size 320).</p></div>'
         '</div>'
     )
     parts.append(
         '<p class="sv3-note">The numbers live only in this visit. The app code does not store photos or video. '
-        'Age and emotion are estimates and can be wrong.</p>'
+        'Emotion is an estimate and can be wrong.</p>'
     )
     parts.append('</div>')
     return _compact("\n".join(parts))
@@ -429,7 +394,7 @@ def show_dashboard():
 #   from dashboard_page import show_dashboard, record_photo, photo_key
 #
 #   # after the photo was analysed (Upload Image and Camera Capture):
-#   record_photo(details, dominant, age_text, key=photo_key(uploaded_file))
+#   record_photo(details, dominant, key=photo_key(uploaded_file), face=True)
 #
 #   # in the sidebar menu: a new page "📊 Dashboard" that calls
 #   show_dashboard()

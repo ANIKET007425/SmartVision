@@ -7,7 +7,7 @@ app.py shows this page when the visitor picks "ℹ️ How it works" in the mode 
         show_how_it_works()
 
 It is only text and styling. No AI model is loaded here, so the page opens
-instantly. The facts below (classes, emotions, age groups, thresholds) are the
+instantly. The facts below (classes, emotions, thresholds) are the
 same ones app.py and live_webcam.py use - if you change them there, change
 them here too.
 """
@@ -54,16 +54,16 @@ INTRO = """
 <div class="hiw-flow">
 <div class="hiw-step"><h4>📥 1. You give a picture</h4><p>Upload a photo, take one with your camera, or switch on the live webcam.</p></div>
 <div class="hiw-arrow">➜</div>
-<div class="hiw-step"><h4>🧠 2. The AI looks at it</h4><p>Up to three models run, and each one has a single job (see below).</p></div>
+<div class="hiw-step"><h4>🧠 2. The AI looks at it</h4><p>Up to two AI models run, and each one has a single job (see below).</p></div>
 <div class="hiw-arrow">➜</div>
-<div class="hiw-step"><h4>📋 3. You get the results</h4><p>Boxes with names and colours, an emotion score for every emotion, and an age range.</p></div>
+<div class="hiw-step"><h4>📋 3. You get the results</h4><p>Boxes with names and colours, and an emotion score for every emotion.</p></div>
 </div>
 </div>
 """
 
 MODELS = """
 <div class="hiw">
-<h3 class="hiw-h">Three models, three jobs</h3>
+<h3 class="hiw-h">Two models, two jobs</h3>
 <div class="hiw-grid">
 <div class="hiw-card"><span class="hiw-tag">YOLO-World</span><h4>🎯 Finds objects</h4>
 <p>We give it a list of words and it looks for them in the picture.</p>
@@ -80,13 +80,39 @@ MODELS = """
 <li>Then a neural network scores 7 emotions: angry, disgust, fear, happy, sad, surprise and neutral. It scores the face and its mirror image and averages the two, so one odd look cannot decide.</li>
 <li>The scores add up to about 100%. The biggest one is the "Dominant Emotion". If the biggest score is below 40%, the app says "Not sure" and only shows its best guess.</li>
 </ul></div>
-<div class="hiw-card"><span class="hiw-tag">OpenCV age model</span><h4>🎂 Guesses an age range</h4>
-<p>A small model that only looks at the face.</p>
+</div>
+</div>
+"""
+
+SECURITY = """
+<div class="hiw">
+<h3 class="hiw-h">🛡️ Security Lab: exact answers, no AI guessing</h3>
+<p class="hiw-lead">The AI models above give estimates. These four tools are different: they are plain calculations, so the answer is exact.</p>
+<div class="hiw-grid">
+<div class="hiw-card"><span class="hiw-tag">Steganography</span><h4>🤫 Secret message in a photo</h4>
+<p>The message is written into the smallest bit of the colour numbers of the pixels, which the eye cannot see.</p>
 <ul>
-<li>The face is cut out of the original picture with extra room around it (hair, forehead and chin) and resized to 96 × 96 pixels. A small model (InsightFace "genderage", 1.3 MB) looks at 7 slightly different crops of it, each also as a mirror image, and the median of the 14 answers is the age in years. The app does not use or show its gender guess.</li>
-<li>The age is then put into one of 8 groups: 0-2, 4-6, 8-12, 15-20, 25-32, 38-43, 48-53 and 60-100. If the age is close to the border of two groups, you see both, for example 25-32 or 38-43. The exact guess in years is shown too.</li>
-<li>This small model is weak with young children (it can say "about 28" for a 4-year-old). So when it says 35 years or less, the older model is asked for a second opinion. If the older model thinks "child", the page shows both groups (for example 4-6 or 25-32) and says it is not sure.</li>
-<li>It is a guess, not an exact age. On a published test the average error of this kind of model was about 7-8 years, and some faces are off by much more. If the 14 answers differ a lot, the app tells you it is not very sure. (If the model file is missing, the app uses the old model instead: 8 groups, 10 looks at 227 × 227 pixels, "not sure" when its best score is below 50%.)</li>
+<li>The result is always saved as a PNG, because PNG keeps every pixel exactly. A JPG would change the pixels and destroy the message.</li>
+<li>A short length and a check number are stored with the message, so the app knows if a picture holds a message or not.</li>
+<li>The message is not encrypted. You can add a password: it then scrambles the message so only that password opens it.</li>
+</ul></div>
+<div class="hiw-card"><span class="hiw-tag">OpenCV</span><h4>📷 QR code reader</h4>
+<p>Reads the QR code in a picture.</p>
+<ul>
+<li>If it reads a code, the text or link is exactly what is stored inside the code.</li>
+<li>For a link, a few simple safety rules are shown (https or not, an IP address, strange words). These rules are hints, not a guarantee that a link is safe.</li>
+</ul></div>
+<div class="hiw-card"><span class="hiw-tag">SHA-256</span><h4>🔑 File fingerprint</h4>
+<p>A file is turned into a fixed 64-character fingerprint.</p>
+<ul>
+<li>The same file always gives the same fingerprint. If even one pixel or one letter changes, the fingerprint changes completely.</li>
+<li>Compare two files, or compare a file with a fingerprint you were given, to see if it was changed.</li>
+</ul></div>
+<div class="hiw-card"><span class="hiw-tag">Pillow + NumPy</span><h4>📐 Image facts</h4>
+<p>Numbers about the picture itself.</p>
+<ul>
+<li>Exact size, format and file size, the brightness, and a sharpness score (higher = sharper).</li>
+<li>The most used colours are counted from the picture's own pixels.</li>
 </ul></div>
 </div>
 </div>
@@ -99,10 +125,10 @@ LIVE = """
 <li><b>Your browser</b> opens the camera, after you press Allow.</li>
 <li>The video travels to the SmartVision server using <b>WebRTC</b>, the same technology as video calls.</li>
 <li>The server runs the object detector on the <b>newest frame</b> only, about every 0.5 seconds. Older frames are skipped, so the video never freezes while the AI is thinking.</li>
-<li>If a person is in the picture, about once a second the server also looks at the <b>face</b> and estimates the emotion and an age range. The answers are averaged over a few seconds so one bad frame cannot change them.</li>
+<li>If a person is in the picture, about once a second the server also looks at the <b>face</b> and estimates the emotion. The answer is averaged over a few seconds so one bad frame cannot change them.</li>
 <li>The boxes are drawn on <b>every frame</b> and the video comes back to your screen, with the names listed below the video.</li>
 </ol>
-<p class="hiw-note">The <b>Video quality</b> choice sets the size of the camera picture. A small picture (Smooth) is the best choice on a phone or a slow network. The age and emotion in live mode are rough estimates and can be switched off in the sidebar if the video is not smooth. The video is processed in memory and thrown away. Nothing is recorded or saved, and pressing STOP ends it.</p>
+<p class="hiw-note">The <b>Video quality</b> choice sets the size of the camera picture. A small picture (Smooth) is the best choice on a phone or a slow network. The emotion in live mode is a rough estimate and can be switched off in the sidebar if the video is not smooth. The video is processed in memory and thrown away. Nothing is recorded or saved, and pressing STOP ends it.</p>
 </div>
 """
 
@@ -110,7 +136,7 @@ SLIDERS = """
 - **Confidence:** every box gets a score from 0 to 1. Boxes below the slider are hidden. A higher value shows fewer but surer boxes. A lower value finds more things, but also makes more mistakes.
 - **Image size (320 or 480):** the picture is shrunk to this size before the detector looks at it. 480 sees small things (like a pen) better. 320 is faster.
 - **Live: detect every (seconds):** how often Live Webcam runs the detector. A smaller number updates the boxes more often, but the server works harder.
-- **Live: show age and emotion:** switches the face estimates in Live Webcam on or off. Off = lighter for the server and smoother video.
+- **Live: show emotion:** switches the face emotion in Live Webcam on or off. Off = lighter for the server and smoother video.
 """
 
 HOW_WORDS = """
@@ -121,11 +147,11 @@ training a new model for each one. That is why adding a new object to SmartVisio
 """
 
 LIMITS = """
-- **These are AI guesses, not facts.** The age is a range and the emotion is only the most likely expression.
+- **These are AI guesses, not facts.** The emotion is only the most likely expression, and the objects can be missed or named wrongly.
   Light, camera angle, glasses, make-up and photo quality can all change the answer.
 - **Small or partly hidden objects can be missed.** Try Image size 480 and move closer to the camera.
 - **Your pictures are not saved.** A photo you upload or take is sent to the SmartVision server, analysed in memory
-  and not stored by the app. Big photos are shrunk to at most 640 pixels when the face is searched (to save memory); the age and emotion are then read from the original picture.
+  and not stored by the app. Big photos are shrunk to at most 640 pixels when the face is searched (to save memory); the emotion is then read from the original picture.
 - **The first start is slower.** The models are loaded once, and after that they are reused.
 """
 
@@ -138,6 +164,7 @@ def show_how_it_works():
     """Draw the whole page."""
     st.markdown(STYLE + INTRO, unsafe_allow_html=True)
     st.markdown(MODELS, unsafe_allow_html=True)
+    st.markdown(SECURITY, unsafe_allow_html=True)
     st.markdown(LIVE, unsafe_allow_html=True)
 
     st.markdown('<div class="hiw"><h3 class="hiw-h">Good to know</h3></div>', unsafe_allow_html=True)

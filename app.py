@@ -16,10 +16,8 @@ import numpy as np
 from PIL import Image, ImageOps
 from ultralytics import YOLOWorld
 from deepface import DeepFace
-# Better age and emotion for photos (see photo_faces.py) and the 3D dashboard page
-from face_boost import get_age_net
+# Better emotion reading for photos (see photo_faces.py) and the 3D dashboard page
 from photo_faces import choose_face, read_face
-from age_model import predict_age
 from dashboard_page import show_dashboard, record_photo, photo_key
 
 # ---------------- Page Setup ----------------
@@ -146,7 +144,7 @@ st.title("🧠 SmartVision")
 st.write(
     " Upload an image, take a photo, or use the live webcam. "
     " Detection of Person, eyeglasses, pen, bag, cup, mobile phone, tie, bottle and book. "
-    " You will also get the emotion percentage and an estimated age range from the face."
+    " You will also get the emotion percentage from the face, and the Security Lab has exact tools (hidden message, QR code, file fingerprint, image facts)."
 )
 # ---------------- Load YOLO-World Model ----------------
 
@@ -173,10 +171,6 @@ def load_yolo_world():
     return model
 
 yolo_model = load_yolo_world()
-
-# ---------------- Age Model ----------------
-# The small OpenCV age model is now loaded and used by face_boost.py (get_age_net),
-# the same copy that Live Webcam uses, so it is only in memory once.
 
 # ---------------- Helper: Tie Colour ----------------
 
@@ -320,8 +314,8 @@ def analyze_objects(frame):
     return annotated_rgb, details
 
 # ---------------- Helper: Face Analysis ----------------
-# The real work (age with the small ONNX model, emotion with a mirror image, "Not sure")
-# is in photo_faces.py and age_model.py. Here we only find the faces and show the answer.
+# The real work (emotion with a mirror image, "Not sure") is in photo_faces.py.
+# Here we only find the faces and show the answer.
 
 def analyze_face(frame):
     """Returns a dict (see photo_faces.read_face), or None if no real face was found."""
@@ -350,21 +344,14 @@ def analyze_face(frame):
         if face is None:
             return None
 
-        # ... but read the age and emotion from the ORIGINAL picture (sharper).
-        result = read_face(frame, face, scale=scale, net=get_age_net, age_fn=predict_age)
+        # ... but read the emotion from the ORIGINAL picture (sharper).
+        result = read_face(frame, face, scale=scale)
         if result is not None:
             result["faces"] = count
         return result
 
     except Exception as e:
-        if isinstance(e, TypeError) and "age_fn" in str(e):
-            st.error(
-                "photo_faces.py is the OLD version. Replace the whole file with the new "
-                "photo_faces.py (it must contain the word age_fn), keep it in the same folder "
-                "as app.py, then stop Streamlit (Ctrl+C) and run it again."
-            )
-        else:
-            st.error(f"Face not detected: {type(e).__name__} — {e}")
+        st.error(f"Face not detected: {type(e).__name__} — {e}")
     finally:
         gc.collect()
 
@@ -380,35 +367,18 @@ def show_face_results(result):
     if result.get("faces", 1) > 1:
         st.caption(f"{result['faces']} faces found. The biggest face is analysed.")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric("Estimated Age", result["age_text"] if result["age_text"] else "N/A")
-        age = result["age"]
-        if age is not None:
-            if age.get("years") is not None and not age.get("child_check"):
-                st.caption(f"Model's guess: about {age['years']:.0f} years (on a published test this kind of model was off by about 7-8 years on average).")
-            if not age["sure"]:
-                st.caption(age.get("note") or "The model is not very sure about this age.")
-            if age.get("source") == "caffe":
-                st.warning(
-                    "The older, weaker age model was used because models/genderage.onnx could not be "
-                    "loaded. Run  python get_age_model.py  once, install onnxruntime, then restart the app."
-                )
-
-    with col2:
-        emotion = result["emotion"]
-        if emotion is None:
-            st.metric("Dominant Emotion", "N/A")
-        elif emotion["sure"]:
-            st.metric(
-                "Dominant Emotion",
-                emotion["name"],
-                f"{emotion['confidence'] * 100:.1f}%"
-            )
-        else:
-            st.metric("Dominant Emotion", "Not sure")
-            st.caption(f"Best guess: {emotion['name']} ({emotion['confidence'] * 100:.0f}%)")
+    emotion = result["emotion"]
+    if emotion is None:
+        st.metric("Dominant Emotion", "N/A")
+    elif emotion["sure"]:
+        st.metric(
+            "Dominant Emotion",
+            emotion["name"],
+            f"{emotion['confidence'] * 100:.1f}%"
+        )
+    else:
+        st.metric("Dominant Emotion", "Not sure")
+        st.caption(f"Best guess: {emotion['name']} ({emotion['confidence'] * 100:.0f}%)")
 
     if result["emotion_scores"]:
         st.subheader("📊 Emotion Confidence")
@@ -420,10 +390,10 @@ def show_face_results(result):
     if result.get("face_rgb") is not None:
         with st.expander("🔍 The face the model looked at"):
             st.image(result["face_rgb"], width=160)
-            st.caption("If this is not a clear, upright face, the age and emotion will be wrong. Try another photo.")
+            st.caption("If this is not a clear, upright face, the emotion will be wrong. Try another photo.")
 
     st.caption(
-        "Age and emotion are estimates and can be wrong. For the best result: "
+        "The emotion is an estimate and can be wrong. For the best result: "
         "face the camera, use good light, and keep the face big and sharp."
     )
 
@@ -433,8 +403,8 @@ def count_for_dashboard(details, result, photo):
         record_photo(
             details,
             result["emotion_text"] if result else None,
-            result["age_text"] if result else None,
-            key=photo_key(photo)
+            key=photo_key(photo),
+            face=result is not None
         )
     except Exception:
         pass
@@ -443,7 +413,7 @@ def count_for_dashboard(details, result, photo):
 
 mode = st.radio(
     "Choose mode:",
-    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam","📊 Dashboard","🔒 Privacy Tools","ℹ️How it works"]
+    ["🖼️ Upload Image", "📸 Camera Capture","🎥 Live Webcam","📊 Dashboard","🔒 Privacy Tools","🛡️ Security Lab","ℹ️How it works"]
 )
 
 # ---------------- 1. Upload Image ----------------
@@ -493,7 +463,7 @@ if mode == "🖼️ Upload Image":
 
         st.subheader("🙂 Face Analysis")
 
-        with st.spinner("Face emotion and age are being analyzed..."):
+        with st.spinner("Face emotion is being analyzed..."):
             face_result = analyze_face(frame)
 
         show_face_results(face_result)
@@ -543,7 +513,7 @@ elif mode == "📸 Camera Capture":
 
         st.subheader("🙂 Face Analysis")
 
-        with st.spinner("Face emotion and age are being analyzed..."):
+        with st.spinner("Face emotion is being analyzed..."):
             face_result = analyze_face(frame)
 
         show_face_results(face_result)
@@ -562,5 +532,8 @@ elif "How it works" in mode:
 elif "Privacy Tools" in mode:
     from privacy_tools import show_privacy_tools
     show_privacy_tools()
+elif "Security Lab" in mode:
+    from security_lab import show_security_lab
+    show_security_lab()
 elif "Dashboard" in mode:
     show_dashboard()

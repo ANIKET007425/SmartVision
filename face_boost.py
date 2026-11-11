@@ -1,22 +1,21 @@
-"""Face helpers for SmartVision: find faces, estimate age range and emotion,
-and keep the answers steady.
+"""Face helpers for SmartVision: find faces, read the emotion and keep the answer steady.
 
 Why this file exists
 --------------------
-Age and emotion from ONE camera frame are noisy. A small AI model can be right
-on one frame and wrong on the next (light, head angle, glasses, blur). Three cheap
-tricks make the answers better without a new model:
+An emotion from ONE camera frame is noisy. A small AI model can be right on one
+frame and wrong on the next (light, head angle, glasses, blur). Two cheap tricks
+make the answer better without a new model:
 
-  1. Many looks at one face (age): the Levi-Hassner age network was trained on
-     256x256 faces with random 227x227 crops. We do the same at test time
-     (centre + corners + mirror image) and AVERAGE the answers.
-  2. Mirror image (emotion): the emotion network sees the face and its mirror
-     image, and the two answers are averaged.
-  3. Averaging over time (live video): the numbers are smoothed over the last
-     few seconds, so one bad frame cannot flip the label.
+  1. Mirror image: the emotion network sees the face and its mirror image, and the
+     two answers are averaged.
+  2. Averaging over time (live video): the numbers are smoothed over the last few
+     seconds, so one bad frame cannot flip the label.
 
 It also says "Not sure" when the model is not confident, instead of showing a
 wrong label with a straight face.
+
+(The estimated-age feature was removed from SmartVision: age models are guesses
+that are often wrong, for example for children and for filtered photos.)
 
 Nothing here needs Streamlit. DeepFace is imported only when an emotion is
 really needed. Nothing is written to disk and nothing is sent anywhere.
@@ -25,13 +24,9 @@ really needed. Nothing is written to disk and nothing is sent anywhere.
 import math
 import threading
 import time
-from pathlib import Path
 
 import cv2
 import numpy as np
-
-# The eight output classes of the Levi-Hassner network, in output order.
-AGE_RANGES = ["0-2", "4-6", "8-12", "15-20", "25-32", "38-43", "48-53", "60-100"]
 
 # DeepFace's emotion names.
 EMOTIONS = ["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"]
@@ -40,50 +35,15 @@ EMOTION_LABELS = {
     "sad": "Sad", "surprise": "Surprise", "neutral": "Neutral",
 }
 
-# Mean pixel values (BGR) the age network was trained with.
-AGE_MEAN = (78.4263377603, 87.7689143744, 114.895847746)
-
 # Below this top probability the label says "Not sure".
 EMOTION_SURE = 0.40
-AGE_SURE = 0.50
-# A second age range is mentioned when it has at least this probability.
-AGE_ALSO = 0.25
 
-_LOAD_LOCK = threading.Lock()
-_AGE_LOCK = threading.Lock()        # cv2.dnn networks are not thread-safe
 _EMOTION_LOCK = threading.Lock()    # one DeepFace emotion call at a time
-_AGE_NET = {"net": None, "tried": False}
 
 
 # ======================================================================
-# Age network (OpenCV DNN, Caffe)
+# Cutting a face out of a picture
 # ======================================================================
-
-def _model_folders():
-    here = Path(__file__).resolve().parent
-    return [here / "models", Path.cwd() / "models"]
-
-
-def get_age_net(reload=False):
-    """Load the age network once for the whole process. Returns None if the
-    two model files are missing or cannot be read (the app then shows N/A)."""
-    with _LOAD_LOCK:
-        if reload:
-            _AGE_NET.update(net=None, tried=False)
-        if _AGE_NET["net"] is not None or _AGE_NET["tried"]:
-            return _AGE_NET["net"]
-        _AGE_NET["tried"] = True
-        for folder in _model_folders():
-            proto = folder / "age_deploy.prototxt"
-            weights = folder / "age_net.caffemodel"
-            if proto.exists() and weights.exists():
-                try:
-                    _AGE_NET["net"] = cv2.dnn.readNetFromCaffe(str(proto), str(weights))
-                    break
-                except Exception:
-                    _AGE_NET["net"] = None
-        return _AGE_NET["net"]
-
 
 def pad_box(box, frame_shape, margin=0.25):
     """Grow a box (x1, y1, x2, y2) by `margin` on every side, kept inside the picture."""
@@ -100,52 +60,6 @@ def crop_face(frame_bgr, box, margin=0.25):
     if x2 - x1 < 8 or y2 - y1 < 8:
         return None
     return frame_bgr[y1:y2, x1:x2]
-
-
-def age_crops(face_bgr, fast=False):
-    """The 227x227 looks at one face.
-
-    fast=True  -> centre + its mirror image         (2 looks, for live video)
-    fast=False -> centre + 4 corners, all mirrored   (10 looks, for photos)
-    """
-    face = cv2.resize(face_bgr, (256, 256), interpolation=cv2.INTER_LINEAR)
-    offsets = [(14, 14)] if fast else [(14, 14), (0, 0), (29, 0), (0, 29), (29, 29)]
-    crops = [face[y:y + 227, x:x + 227] for x, y in offsets]
-    crops += [cv2.flip(c, 1) for c in crops]
-    return crops
-
-
-def age_probabilities(net, face_bgr, fast=False):
-    """Average probability of each of the eight age ranges (numpy array, sums to 1).
-    Returns None if the network gives nothing usable."""
-    crops = age_crops(face_bgr, fast=fast)
-    blob = cv2.dnn.blobFromImages(crops, 1.0, (227, 227), AGE_MEAN, swapRB=False)
-    with _AGE_LOCK:
-        net.setInput(blob)
-        out = net.forward()
-    out = np.asarray(out, dtype=np.float64).reshape(len(crops), -1)[:, :len(AGE_RANGES)]
-    if out.shape[1] != len(AGE_RANGES) or not np.all(np.isfinite(out)):
-        return None
-    probs = out.mean(axis=0)
-    total = probs.sum()
-    return probs / total if total > 0 else None
-
-
-def describe_age(probs):
-    """Turn eight probabilities into a small, honest summary."""
-    probs = np.asarray(probs, dtype=np.float64)
-    order = np.argsort(probs)[::-1]
-    top, second = int(order[0]), int(order[1])
-    confidence = float(probs[top])
-    also = AGE_RANGES[second] if float(probs[second]) >= AGE_ALSO else None
-    text = AGE_RANGES[top] + (f" or {also}" if also else "")
-    return {
-        "range": AGE_RANGES[top],
-        "also": also,
-        "confidence": confidence,
-        "sure": confidence >= AGE_SURE,
-        "text": text,
-    }
 
 
 # ======================================================================
@@ -285,7 +199,6 @@ class _Track:
         self.set_box(box)
         self.seen = now
         self.emotion = None     # smoothed probabilities
-        self.age = None
         self.updates = 0
 
     def set_box(self, box):
@@ -303,9 +216,8 @@ class FaceTracker:
     two or three analyses does.
     """
 
-    def __init__(self, alpha_emotion=0.35, alpha_age=0.3, forget_seconds=4.0):
+    def __init__(self, alpha_emotion=0.35, forget_seconds=4.0):
         self.alpha_emotion = alpha_emotion
-        self.alpha_age = alpha_age
         self.forget_seconds = forget_seconds
         self.tracks = []
         self._next_id = 1
@@ -335,9 +247,8 @@ class FaceTracker:
         new = np.asarray(new, dtype=np.float64)
         return new if old is None else alpha * new + (1.0 - alpha) * old
 
-    def update(self, track, emotion_vec, age_vec):
+    def update(self, track, emotion_vec):
         track.emotion = self._blend(track.emotion, emotion_vec, self.alpha_emotion)
-        track.age = self._blend(track.age, age_vec, self.alpha_age)
         track.updates += 1
 
     def forget(self, now):
@@ -349,17 +260,14 @@ class FaceTracker:
 # ======================================================================
 
 class FacePipeline:
-    """find faces -> emotion + age for each -> smooth over time -> short text.
+    """find faces -> emotion for each -> smooth over time -> short text.
 
-    finder, age_net_fn and emotion_fn can be replaced (used by the tests).
+    finder and emotion_fn can be replaced (used by the tests).
     """
 
-    def __init__(self, finder=None, age_net_fn=None, emotion_fn=None,
-                 want_age=True, want_emotion=True, max_faces=2):
+    def __init__(self, finder=None, emotion_fn=None, want_emotion=True, max_faces=2):
         self.finder = finder or FaceFinder()
-        self.age_net_fn = age_net_fn or get_age_net
         self.emotion_fn = emotion_fn or emotion_vector
-        self.want_age = want_age
         self.want_emotion = want_emotion
         self.max_faces = max_faces
         self.tracker = FaceTracker()
@@ -370,7 +278,7 @@ class FacePipeline:
         self.tracker = FaceTracker()
 
     def analyze(self, frame_bgr, person_boxes=None, now=None):
-        """Returns a list of dicts: id, box, lines (texts to show), emotion, age."""
+        """Returns a list of dicts: id, box, lines (texts to show), emotion."""
         now = time.monotonic() if now is None else now
         self.status = ""
 
@@ -384,19 +292,10 @@ class FacePipeline:
             boxes = [b for b in boxes if inside_any(b, person_boxes)]
         boxes = boxes[:self.max_faces]
 
-        net = None
-        if self.want_age:
-            try:
-                net = self.age_net_fn()
-            except Exception as e:
-                self.error = f"age: {type(e).__name__}: {e}"
-        if self.want_age and net is None:
-            self.status = "Age model files not found (age is skipped)."
-
         results = []
         for box in boxes:
             track = self.tracker.assign(box, now)
-            emotion_vec = age_vec = None
+            emotion_vec = None
 
             if self.want_emotion:
                 face = crop_face(frame_bgr, box, margin=0.08)
@@ -405,26 +304,15 @@ class FacePipeline:
                         emotion_vec = self.emotion_fn(face)
                     except Exception as e:
                         self.error = f"emotion: {type(e).__name__}: {e}"
-                        self.status = "Emotion could not be read (age still works)."
+                        self.status = "Emotion could not be read."
 
-            if net is not None:
-                face = crop_face(frame_bgr, box, margin=0.25)
-                if face is not None:
-                    try:
-                        age_vec = age_probabilities(net, face, fast=True)
-                    except Exception as e:
-                        self.error = f"age: {type(e).__name__}: {e}"
-
-            self.tracker.update(track, emotion_vec, age_vec)
+            self.tracker.update(track, emotion_vec)
 
             lines = []
             emotion = describe_emotion(track.emotion) if track.emotion is not None else None
-            age = describe_age(track.age) if track.age is not None else None
             if emotion:
                 lines.append(emotion["text"])
-            if age:
-                lines.append(f"Age {age['text']}")
-            results.append({"id": track.id, "box": box, "lines": lines, "emotion": emotion, "age": age})
+            results.append({"id": track.id, "box": box, "lines": lines, "emotion": emotion})
 
         self.tracker.forget(now)
         return results
